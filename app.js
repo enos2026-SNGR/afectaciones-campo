@@ -824,8 +824,17 @@
   // ---------------- Paso 6: Mapa ----------------
   function crearMapa(div, centro, zoom) {
     var mapa = L.map(div, { zoomControl: true, attributionControl: true, zoomAnimation: false, fadeAnimation: false, markerZoomAnimation: false });
-    var base = L.tileLayer(CONFIG.TESELAS_BASE, { subdomains: CONFIG.TESELAS_BASE_SUB, maxZoom: 19, maxNativeZoom: 18, attribution: CONFIG.TESELAS_BASE_ATRIB, crossOrigin: true }).addTo(mapa);
+    var base = L.tileLayer(CONFIG.TESELAS_BASE, { subdomains: CONFIG.TESELAS_BASE_SUB.length ? CONFIG.TESELAS_BASE_SUB : 'abc', maxZoom: 19, maxNativeZoom: 18, attribution: CONFIG.TESELAS_BASE_ATRIB, crossOrigin: true }).addTo(mapa);
     var sat = L.tileLayer(CONFIG.TESELAS_SATELITE, { maxZoom: 19, maxNativeZoom: 18, attribution: CONFIG.TESELAS_SATELITE_ATRIB });
+    // Respaldo: si el mapa base falla con señal, se cambia a OpenStreetMap (solo visualización, sin descarga masiva)
+    var errores = 0, respaldo = false;
+    base.on('tileerror', function () {
+      if (respaldo || !navigator.onLine || ++errores < 4) return;
+      respaldo = true;
+      mapa.removeLayer(base);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapa).bringToBack();
+    });
+    base.on('tileload', function () { errores = 0; });
     var capas = { 'Mapa base': base, 'Satélite (requiere señal)': sat };
     var extra = {};
     if (S.parroquias) {
@@ -1294,7 +1303,7 @@
     ZONAS_MAPA.forEach(function (zn) { for (var z = 14; z <= 17; z++) add(teselasDe(zn.caja, z)); });
     var sub = CONFIG.TESELAS_BASE_SUB;
     return t.map(function (k) {
-      var s = sub[Math.abs(k[1] + k[2]) % sub.length]; // misma regla de Leaflet para elegir subdominio
+      var s = sub.length ? sub[Math.abs(k[1] + k[2]) % sub.length] : ''; // misma regla de Leaflet para elegir subdominio
       return CONFIG.TESELAS_BASE.replace('{s}', s).replace('{z}', k[0]).replace('{x}', k[1]).replace('{y}', k[2]);
     });
   }
@@ -1312,7 +1321,7 @@
         if (!navigator.onLine) return toast('Se necesita señal');
         $('#desc').disabled = true;
         var hechas = 0, fallidas = 0, i = 0, total = urls.length;
-        caches.open('campo-teselas-v1').then(function (c) {
+        caches.open('campo-teselas-v2').then(function (c) {
           function sig() {
             if (i >= total) return Promise.resolve();
             var u = urls[i++];

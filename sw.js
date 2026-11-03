@@ -1,8 +1,8 @@
 /* Service worker: abre la app sin conexión, guarda teselas del mapa y sincroniza en segundo plano (Android) */
 importScripts('config.js', 'db.js', 'sync.js');
 
-var APP = 'campo-app-v1';
-var TESELAS = 'campo-teselas-v1';
+var APP = 'campo-app-v2';
+var TESELAS = 'campo-teselas-v2';
 var ARCHIVOS = [
   './', 'index.html', 'app.js', 'estilos.css', 'config.js', 'catalogos.js', 'db.js', 'sync.js',
   'manifest.webmanifest', 'icons/icono-192.png', 'icons/icono-512.png',
@@ -25,7 +25,7 @@ self.addEventListener('activate', function (e) {
 });
 
 function esTesela(url) {
-  return /basemaps\.cartocdn\.com|arcgisonline\.com/.test(url);
+  return /arcgisonline\.com|tile\.openstreetmap\.org/.test(url);
 }
 
 self.addEventListener('fetch', function (e) {

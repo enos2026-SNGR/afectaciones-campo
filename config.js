@@ -11,9 +11,10 @@ var CONFIG = {
   RESPALDO_SUGERIDO_H: 4,
   MAX_FOTOS: 10,
   FOTO_OBJETIVO_KB: 250,
-  TESELAS_BASE: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-  TESELAS_BASE_SUB: ['a', 'b', 'c', 'd'],
-  TESELAS_BASE_ATRIB: '© OpenStreetMap, © CARTO',
+  // Mapa de calles de Esri: no requiere clave de API
+  TESELAS_BASE: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  TESELAS_BASE_SUB: [],
+  TESELAS_BASE_ATRIB: 'Mapa © Esri, HERE, Garmin, OpenStreetMap',
   TESELAS_SATELITE: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   TESELAS_SATELITE_ATRIB: 'Imagen © Esri'
 };
