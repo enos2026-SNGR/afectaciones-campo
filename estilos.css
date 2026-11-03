@@ -199,3 +199,4 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #93c5fd; border-c
   .opciones { grid-template-columns: repeat(3, 1fr); }
   .fotos { grid-template-columns: repeat(3, 1fr); }
 }
+[hidden] { display: none !important; }

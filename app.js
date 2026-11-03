@@ -177,14 +177,21 @@
   }
   function vistaInstalar() {
     limpiarVista(); titulo('Instalar la app');
-    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    // iPadOS se presenta como Mac: se reconoce por la pantalla táctil
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    var tIos = '<div class="tarjeta"><h2>En iPhone o iPad</h2><ol>' +
+      '<li>Abra este enlace en <b>Safari</b>. Si lo abrió desde WhatsApp, toque los tres puntos o la brújula y elija <b>Abrir en Safari</b>.</li>' +
+      '<li>Toque el botón <b>Compartir</b>: el cuadro con la flecha hacia arriba, en la barra de abajo (en iOS reciente puede estar dentro del botón <b>···</b>).</li>' +
+      '<li>Baje en la lista y elija <b>Agregar a pantalla de inicio</b>. Si no aparece, toque <b>Editar acciones</b> y agréguela.</li>' +
+      '<li>Toque <b>Agregar</b>, arriba a la derecha.</li>' +
+      '<li>Cierre Safari y abra la app desde el ícono nuevo <b>Afectaciones GAL</b>.</li></ol></div>';
+    var tAnd = '<div class="tarjeta"><h2>En Android</h2>' +
+      '<button class="btn primario" id="btnInstalar" ' + (promptInstalar ? '' : 'hidden') + '>Instalar ahora</button>' +
+      '<ol><li>Abra este enlace en <b>Chrome</b>.</li><li>Toque el menú <b>⋮</b> del navegador.</li><li>Elija <b>Instalar app</b> o <b>Agregar a pantalla de inicio</b>.</li><li>Abra la app desde el ícono nuevo <b>Afectaciones GAL</b>.</li></ol></div>';
     $('#vista').innerHTML =
       '<div class="aviso alerta">Para registrar afectaciones la app debe estar instalada en la pantalla de inicio. Así abre sin señal y el teléfono no borra las fichas guardadas.</div>' +
-      '<div class="tarjeta"><h2>' + (ios ? 'En iPhone (Safari)' : 'En Android (Chrome)') + '</h2>' +
-      (ios ? '<ol><li>Toque el botón <b>Compartir</b> (cuadro con flecha hacia arriba).</li><li>Elija <b>Agregar a pantalla de inicio</b>.</li><li>Toque <b>Agregar</b> y abra la app desde el nuevo ícono.</li></ol>'
-           : '<button class="btn primario" id="btnInstalar" ' + (promptInstalar ? '' : 'hidden') + '>Instalar ahora</button>' +
-             '<ol><li>Toque el menú <b>⋮</b> del navegador.</li><li>Elija <b>Instalar app</b> o <b>Agregar a pantalla de inicio</b>.</li><li>Abra la app desde el nuevo ícono.</li></ol>') +
-      '</div><p class="muted">Abra esta página con señal la primera vez, para que la app quede guardada en el teléfono.</p>';
+      (ios ? tIos + tAnd : tAnd + tIos) +
+      '<p class="muted">Abra esta página con señal la primera vez, para que la app quede guardada en el teléfono.</p>';
     var b = $('#btnInstalar');
     if (b) b.onclick = function () { if (promptInstalar) { promptInstalar.prompt(); promptInstalar.userChoice.then(function () { promptInstalar = null; }); } };
   }
