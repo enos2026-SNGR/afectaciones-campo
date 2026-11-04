@@ -205,7 +205,7 @@
   function entrarCon(sesion) {
     S.sesion = sesion; sesion.desde = Date.now();
     return DB.kvSet('sesion', sesion).then(function () { return DB.kvSet('authError', ''); }).then(function () {
-      if (sesion.correo) DB.kvSet('ultimoCorreo', sesion.correo);
+      if (sesion.correo && sesion.correo !== 'ADMINISTRADOR') DB.kvSet('ultimoCorreo', sesion.correo);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
       return Sync.sincronizar();
     }).then(cargarDatos).then(vistaInicio);
@@ -234,7 +234,8 @@
         cuerpo = '<div class="tarjeta">' + campoAcc('correo', 'Correo electrónico', 'email', 'autocomplete="username" inputmode="email" value="' + esc(ultimo || '') + '"') +
           campoAcc('clave', 'Clave', 'password', 'autocomplete="current-password"') +
           '<button class="btn primario" id="go">Ingresar</button>' +
-          '<button class="btn" id="olvide" style="border:0">Olvidé mi clave</button></div>';
+          '<button class="btn" id="olvide" style="border:0">Olvidé mi clave</button></div>' +
+          '<p style="text-align:center"><button class="btn chico" id="admin" style="border:0;margin:auto">Ingresar con código de administrador</button></p>';
       } else if (pestana === 'registro') {
         cuerpo = '<div class="tarjeta"><p class="muted">Con correo institucional (@gestionderiesgos.gob.ec) el acceso es inmediato al verificar el correo. Con otro correo, el coordinador debe aprobarlo.</p>' +
           campoAcc('nombre', 'Nombres y apellidos', 'text', 'autocomplete="name"') +
@@ -250,6 +251,7 @@
       var go = $('#go');
       if (pestana === 'ingresar') {
         $('#olvide').onclick = function () { vistaRecuperar($('#correo').value.trim()); };
+        $('#admin').onclick = vistaAdmin;
         go.onclick = function () {
           var correo = $('#correo').value.trim(), clave = $('#clave').value;
           if (!correo || !clave) return msgAcc('Ingrese su correo y su clave.');
@@ -273,6 +275,21 @@
         };
       }
     });
+  }
+
+  // Código único de administrador: todos los permisos
+  function vistaAdmin() {
+    limpiarVista(); titulo('Administrador', function () { vistaAcceso('ingresar'); });
+    $('#vista').innerHTML = '<div class="tarjeta"><p class="muted">Código único de administrador (hoja Configuración, CODIGO_ADMINISTRADOR).</p>' +
+      campoAcc('adm', 'Código de administrador', 'password', 'autocomplete="off" autocapitalize="characters"') +
+      '<button class="btn primario" id="go">Ingresar</button></div><div id="msg"></div>';
+    $('#go').onclick = function () {
+      var c = $('#adm').value.trim(); if (!c) return;
+      if (sinSenal()) return;
+      ocupado($('#go'), true);
+      Sync.post({ accion: 'ingresarAdmin', codigo: c }).then(function (r) { return tratarAcceso(r, 'ADMINISTRADOR'); })
+        .catch(function (e) { ocupado($('#go'), false); msgAcc(esc(e.message)); });
+    };
   }
 
   // Código de 6 dígitos enviado por correo: verificar el correo o restablecer la clave
