@@ -76,8 +76,8 @@
   MULTI.forEach(function (k) { VACIO[k] = []; });
 
   function cargarDatos() {
-    return Promise.all([DB.kvGet('sesion'), DB.kvGet('eventos'), DB.kvGet('eventosHora'), DB.todos('fichas')]).then(function (r) {
-      S.sesion = r[0] || null; S.eventos = r[1] || []; S.eventosHora = r[2] || null; S.fichas = r[3] || [];
+    return Promise.all([DB.kvGet('sesion'), DB.kvGet('eventos'), DB.kvGet('eventosHora'), DB.todos('fichas'), DB.kvGet('authError')]).then(function (r) {
+      S.sesion = r[0] || null; S.eventos = r[1] || []; S.eventosHora = r[2] || null; S.fichas = r[3] || []; S.authError = r[4] || '';
     });
   }
 
@@ -196,29 +196,138 @@
     if (b) b.onclick = function () { if (promptInstalar) { promptInstalar.prompt(); promptInstalar.userChoice.then(function () { promptInstalar = null; }); } };
   }
 
-  function vistaAcceso() {
-    limpiarVista(); titulo('Acceso del técnico');
-    $('#vista').innerHTML =
-      '<div class="tarjeta"><h2>Ingrese su código</h2><p class="muted">El coordinador le asigna el código. La primera vez se necesita señal para validarlo.</p>' +
-      '<div class="campo"><input type="text" id="codigo" autocapitalize="characters" autocomplete="off" placeholder="Código del técnico"></div>' +
-      '<button class="btn primario" id="entrar">Entrar</button><div id="msg" style="margin-top:12px"></div></div>' +
-      (CONFIG.BACKEND_URL ? '' : '<div class="aviso error">La app aún no tiene configurado el servidor. Avise al coordinador.</div>');
-    $('#entrar').onclick = function () {
-      var c = $('#codigo').value.trim().toUpperCase();
-      if (!c) return;
-      if (!navigator.onLine) { $('#msg').innerHTML = '<div class="aviso alerta">Sin señal. Intente cuando tenga conexión.</div>'; return; }
-      $('#entrar').disabled = true; $('#msg').innerHTML = '<p class="muted">Validando…</p>';
-      Sync.post({ accion: 'validarTecnico', codigo: c }).then(function (r) {
+  // Acceso: cuenta con correo y clave (registro propio) o código asignado por el coordinador
+  function campoAcc(id, et, tipo, extra) {
+    return '<div class="campo"><label for="' + id + '">' + et + '</label><input type="' + (tipo || 'text') + '" id="' + id + '" ' + (extra || '') + '></div>';
+  }
+  function msgAcc(html, clase) { $('#msg').innerHTML = html ? '<div class="aviso ' + (clase || 'error') + '">' + html + '</div>' : ''; }
+  function sinSenal() { if (navigator.onLine) return false; msgAcc('Sin señal. Intente cuando tenga conexión.', 'alerta'); return true; }
+  function entrarCon(sesion) {
+    S.sesion = sesion; sesion.desde = Date.now();
+    return DB.kvSet('sesion', sesion).then(function () { return DB.kvSet('authError', ''); }).then(function () {
+      if (sesion.correo) DB.kvSet('ultimoCorreo', sesion.correo);
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+      return Sync.sincronizar();
+    }).then(cargarDatos).then(vistaInicio);
+  }
+  function tratarAcceso(r, correo) {
+    if (!r.ok) throw new Error(r.error);
+    if (r.estado === 'HABILITADO') return entrarCon({ tipo: 'usuario', codigo: r.correo, correo: r.correo, nombre: r.nombre, token: r.token });
+    if (r.estado === 'PENDIENTE_VERIFICACION') return vistaCodigo(correo, 'verificar', r.mensaje);
+    if (r.estado === 'PENDIENTE_APROBACION') {
+      limpiarVista(); titulo('Acceso pendiente', function () { vistaAcceso('ingresar'); });
+      $('#vista').innerHTML = '<div class="aviso info">' + esc(r.mensaje) + '</div><button class="btn primario" id="volver">Volver a ingresar</button>';
+      $('#volver').onclick = function () { vistaAcceso('ingresar'); };
+    }
+  }
+  function ocupado(b, si) { b.disabled = si; if (si) msgAcc('<span class="muted">Procesando…</span>', 'info'); }
+
+  function vistaAcceso(pestana) {
+    limpiarVista(); titulo('Acceso');
+    pestana = pestana || 'ingresar';
+    DB.kvGet('ultimoCorreo').then(function (ultimo) {
+      var tabs = '<div class="fila-btn" style="margin-bottom:14px">' +
+        '<button class="btn' + (pestana === 'ingresar' ? ' primario' : '') + '" data-tab="ingresar">Ingresar</button>' +
+        '<button class="btn' + (pestana === 'registro' ? ' primario' : '') + '" data-tab="registro">Registrarme</button></div>';
+      var cuerpo;
+      if (pestana === 'ingresar') {
+        cuerpo = '<div class="tarjeta">' + campoAcc('correo', 'Correo electrónico', 'email', 'autocomplete="username" inputmode="email" value="' + esc(ultimo || '') + '"') +
+          campoAcc('clave', 'Clave', 'password', 'autocomplete="current-password"') +
+          '<button class="btn primario" id="go">Ingresar</button>' +
+          '<button class="btn" id="olvide" style="border:0">Olvidé mi clave</button></div>';
+      } else if (pestana === 'registro') {
+        cuerpo = '<div class="tarjeta"><p class="muted">Con correo institucional (@gestionderiesgos.gob.ec) el acceso es inmediato al verificar el correo. Con otro correo, el coordinador debe aprobarlo.</p>' +
+          campoAcc('nombre', 'Nombres y apellidos', 'text', 'autocomplete="name"') +
+          campoAcc('correo', 'Correo electrónico', 'email', 'autocomplete="email" inputmode="email"') +
+          campoAcc('inst', 'Institución', 'text', 'placeholder="Ej.: SNGR, GAD Santa Cruz, Cuerpo de Bomberos"') +
+          campoAcc('clave', 'Clave (mínimo 8 caracteres)', 'password', 'autocomplete="new-password"') +
+          campoAcc('clave2', 'Repita la clave', 'password', 'autocomplete="new-password"') +
+          '<button class="btn accion" id="go">Crear cuenta</button></div>';
+      } else {
+        cuerpo = '<div class="tarjeta"><p class="muted">Código asignado por el coordinador.</p>' +
+          campoAcc('codigo', 'Código', 'text', 'autocapitalize="characters" autocomplete="off"') + '<button class="btn primario" id="go">Entrar</button></div>';
+      }
+      $('#vista').innerHTML = tabs + cuerpo + '<div id="msg"></div>' +
+        (pestana !== 'codigo' ? '<p style="text-align:center"><button class="btn chico" style="border:0;margin:auto" id="conCodigo">Ingresar con código del coordinador</button></p>' : '<p style="text-align:center"><button class="btn chico" style="border:0;margin:auto" data-tab="ingresar">Ingresar con correo y clave</button></p>') +
+        (CONFIG.BACKEND_URL ? '' : '<div class="aviso error">La app aún no tiene configurado el servidor. Avise al coordinador.</div>');
+      $$('[data-tab]').forEach(function (b) { b.onclick = function () { vistaAcceso(b.getAttribute('data-tab')); }; });
+      if ($('#conCodigo')) $('#conCodigo').onclick = function () { vistaAcceso('codigo'); };
+      var go = $('#go');
+      if (pestana === 'ingresar') {
+        $('#olvide').onclick = function () { vistaRecuperar($('#correo').value.trim()); };
+        go.onclick = function () {
+          var correo = $('#correo').value.trim(), clave = $('#clave').value;
+          if (!correo || !clave) return msgAcc('Ingrese su correo y su clave.');
+          if (sinSenal()) return;
+          ocupado(go, true);
+          Sync.post({ accion: 'ingresar', correo: correo, clave: clave }).then(function (r) { return tratarAcceso(r, correo); })
+            .catch(function (e) { ocupado(go, false); msgAcc(esc(e.message)); });
+        };
+      } else if (pestana === 'registro') {
+        go.onclick = function () {
+          var d = { nombre: $('#nombre').value.trim(), correo: $('#correo').value.trim(), institucion: $('#inst').value.trim(), clave: $('#clave').value };
+          if (!d.nombre || !d.correo || !d.institucion || !d.clave) return msgAcc('Complete todos los campos.');
+          if (d.clave.length < 8) return msgAcc('La clave debe tener al menos 8 caracteres.');
+          if (d.clave !== $('#clave2').value) return msgAcc('Las claves no coinciden.');
+          if (sinSenal()) return;
+          ocupado(go, true);
+          Sync.post(Object.assign({ accion: 'registrar' }, d)).then(function (r) {
+            if (!r.ok) throw new Error(r.error);
+            vistaCodigo(r.correo, 'verificar', r.mensaje);
+          }).catch(function (e) { ocupado(go, false); msgAcc(esc(e.message)); });
+        };
+      } else {
+        go.onclick = function () {
+          var c = $('#codigo').value.trim().toUpperCase(); if (!c) return;
+          if (sinSenal()) return;
+          ocupado(go, true);
+          Sync.post({ accion: 'validarTecnico', codigo: c }).then(function (r) {
+            if (!r.ok) throw new Error(r.error);
+            return entrarCon({ tipo: 'codigo', codigo: r.codigo, nombre: r.nombre });
+          }).catch(function (e) { ocupado(go, false); msgAcc(esc(e.message || 'No se pudo validar')); });
+        };
+      }
+    });
+  }
+
+  // Código de 6 dígitos enviado por correo: verificar el correo o restablecer la clave
+  function vistaCodigo(correo, motivo, mensaje) {
+    limpiarVista(); titulo(motivo === 'verificar' ? 'Verifique su correo' : 'Nueva clave', function () { vistaAcceso('ingresar'); });
+    $('#vista').innerHTML = '<div class="aviso info">' + esc(mensaje || 'Le enviamos un código a ' + correo) + '. Revise también la carpeta de spam.</div>' +
+      '<div class="tarjeta">' + campoAcc('cod', 'Código de 6 dígitos', 'text', 'inputmode="numeric" autocomplete="one-time-code" maxlength="6"') +
+      (motivo === 'recuperar' ? campoAcc('clave', 'Nueva clave (mínimo 8 caracteres)', 'password', 'autocomplete="new-password"') + campoAcc('clave2', 'Repita la nueva clave', 'password', 'autocomplete="new-password"') : '') +
+      '<button class="btn primario" id="go">' + (motivo === 'verificar' ? 'Verificar' : 'Guardar nueva clave') + '</button>' +
+      '<button class="btn" id="reenviar" style="border:0">Enviar un código nuevo</button></div><div id="msg"></div>';
+    $('#go').onclick = function () {
+      var cod = $('#cod').value.trim(); if (cod.length !== 6) return msgAcc('El código tiene 6 dígitos.');
+      var cuerpo = { accion: motivo === 'verificar' ? 'verificar' : 'restablecer', correo: correo, codigo: cod };
+      if (motivo === 'recuperar') {
+        cuerpo.clave = $('#clave').value;
+        if (cuerpo.clave.length < 8) return msgAcc('La clave debe tener al menos 8 caracteres.');
+        if (cuerpo.clave !== $('#clave2').value) return msgAcc('Las claves no coinciden.');
+      }
+      if (sinSenal()) return;
+      ocupado($('#go'), true);
+      Sync.post(cuerpo).then(function (r) { return tratarAcceso(r, correo); }).catch(function (e) { ocupado($('#go'), false); msgAcc(esc(e.message)); });
+    };
+    $('#reenviar').onclick = function () {
+      if (sinSenal()) return;
+      Sync.post({ accion: motivo === 'verificar' ? 'reenviarCodigo' : 'recuperar', correo: correo }).then(function (r) { msgAcc(esc(r.mensaje || r.error), r.ok ? 'ok' : 'error'); });
+    };
+  }
+  function vistaRecuperar(correo) {
+    limpiarVista(); titulo('Olvidé mi clave', function () { vistaAcceso('ingresar'); });
+    $('#vista').innerHTML = '<div class="tarjeta"><p>Le enviaremos un código a su correo para crear una clave nueva.</p>' +
+      campoAcc('correo', 'Correo electrónico', 'email', 'inputmode="email" value="' + esc(correo || '') + '"') +
+      '<button class="btn primario" id="go">Enviar código</button></div><div id="msg"></div>';
+    $('#go').onclick = function () {
+      var c = $('#correo').value.trim(); if (!c) return msgAcc('Ingrese su correo.');
+      if (sinSenal()) return;
+      ocupado($('#go'), true);
+      Sync.post({ accion: 'recuperar', correo: c }).then(function (r) {
         if (!r.ok) throw new Error(r.error);
-        S.sesion = { codigo: r.codigo, nombre: r.nombre, desde: Date.now() };
-        return DB.kvSet('sesion', S.sesion);
-      }).then(function () {
-        if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
-        return Sync.sincronizar();
-      }).then(function () { return cargarDatos(); }).then(vistaInicio).catch(function (e) {
-        $('#entrar').disabled = false;
-        $('#msg').innerHTML = '<div class="aviso error">' + esc(e.message || 'No se pudo validar') + '</div>';
-      });
+        vistaCodigo(c.toLowerCase(), 'recuperar', r.mensaje);
+      }).catch(function (e) { ocupado($('#go'), false); msgAcc(esc(e.message)); });
     };
   }
 
@@ -238,6 +347,7 @@
     var rechazos = S.eventos.filter(function (e) { return e.cierre === 'RECHAZADO'; });
 
     var h = '';
+    if (S.authError) h += '<div class="aviso error">' + esc(S.authError) + ' Sus fichas siguen guardadas en el teléfono.<button class="btn chico" id="reIngresar">Volver a ingresar</button></div>';
     if (errs.length) h += '<div class="aviso error">' + errs.length + ' ficha(s) con error que requieren su revisión.<button class="btn chico" data-ir="mis">Revisar</button></div>';
     if (borrViejo) h += '<div class="aviso alerta">Tiene borradores sin enviar desde hace más de ' + CONFIG.BORRADOR_RECORDATORIO_H + ' hora. Esa información no llega al COE hasta que la envíe.<button class="btn chico" data-ir="mis">Ver borradores</button></div>';
     if (pendViejo) h += '<div class="aviso alerta">Hay fichas sin enviar desde hace más de ' + CONFIG.RESPALDO_SUGERIDO_H + ' horas. Exporte un respaldo a otro teléfono por si este se pierde o se daña.<button class="btn chico" data-ir="respaldo">Exportar respaldo</button></div>';
@@ -257,17 +367,20 @@
       '<div class="tarjeta" style="margin-top:14px"><h2>Herramientas</h2>' +
       '<button class="btn" data-ir="mapaoff">Preparar mapa sin conexión</button>' +
       '<button class="btn" data-ir="respaldo">Respaldo entre teléfonos</button>' +
-      '<p class="muted" style="margin-top:12px">Técnico: <b>' + esc(S.sesion.codigo) + '</b> ' + esc(S.sesion.nombre || '') + '</p>' +
+      '<p class="muted" style="margin-top:12px">Sesión: <b>' + esc(S.sesion.nombre || '') + '</b> (' + esc(S.sesion.codigo) + ')</p>' +
       '<button class="btn peligro chico" id="salir">Cerrar sesión</button></div>';
     $('#vista').innerHTML = h;
 
     $('#nuevo').onclick = function () { nuevaFicha('INICIAL'); };
+    if ($('#reIngresar')) $('#reIngresar').onclick = function () { DB.kvSet('sesion', null).then(function () { S.sesion = null; vistaAcceso('ingresar'); }); };
     $('#actualizar').onclick = vistaElegirEvento;
     $('#enviarYa').onclick = function () { enviarAhora(); };
     $('#salir').onclick = function () {
       var hay = S.fichas.some(function (f) { return f.estado !== 'enviada'; });
       confirmar(hay ? 'Hay fichas sin enviar. Se conservarán en el teléfono. ¿Cerrar sesión?' : '¿Cerrar sesión?', 'Cerrar sesión').then(function (ok) {
-        if (!ok) return; DB.kvSet('sesion', null).then(function () { S.sesion = null; vistaAcceso(); });
+        if (!ok) return;
+        if (S.sesion.token && navigator.onLine) Sync.post(Sync.cred(S.sesion, { accion: 'cerrarSesion' })).catch(function () {});
+        DB.kvSet('sesion', null).then(function () { S.sesion = null; vistaAcceso(); });
       });
     };
     $$('[data-ir]').forEach(function (b) {

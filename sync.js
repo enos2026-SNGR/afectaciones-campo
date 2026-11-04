@@ -56,9 +56,23 @@ var Sync = (function () {
     });
   }
 
-  function refrescarEventos(codigo) {
-    return post({ accion: 'eventos', codigo: codigo }).then(function (r) {
+  // Credenciales del técnico: código, o correo y token de sesión de su cuenta
+  function cred(sesion, extra) {
+    var o = { codigo: sesion.codigo };
+    if (sesion.token) { o.correo = sesion.correo; o.token = sesion.token; }
+    Object.keys(extra || {}).forEach(function (k) { o[k] = extra[k]; });
+    return o;
+  }
+  function ErrorAuth(msg) { this.message = msg; this.auth = true; }
+
+  function refrescarEventos(sesion) {
+    if (typeof sesion === 'string') sesion = { codigo: sesion };
+    return post(cred(sesion, { accion: 'eventos' })).then(function (r) {
+      if (!r.ok && r.auth) {
+        return DB.kvSet('authError', r.error).then(function () { avisar({ tipo: 'auth', error: r.error }); throw new ErrorAuth(r.error); });
+      }
       if (!r.ok) throw new Error(r.error);
+      DB.kvSet('authError', '');
       return DB.kvSet('eventos', r.eventos).then(function () {
         return DB.kvSet('eventosHora', Date.now());
       }).then(function () { avisar({ tipo: 'eventos' }); return r.eventos; });
@@ -77,7 +91,7 @@ var Sync = (function () {
       sesion = s;
       if (!sesion) throw new Error('Sin sesión');
       // 1. Primero la lista de eventos: pesa poco y evita duplicados
-      return refrescarEventos(sesion.codigo);
+      return refrescarEventos(sesion);
     }).then(function () {
       return DB.todos('fichas');
     }).then(function (fichas) {
@@ -90,8 +104,12 @@ var Sync = (function () {
           f.estado = 'enviando';
           return DB.put('fichas', f).then(function () {
             avisar({ tipo: 'ficha', id: f.id_visita, estado: 'enviando' });
-            return post({ accion: 'enviarVisita', codigo: sesion.codigo, visita: payloadVisita(f), geometrias: f.geometrias_envio || f.geometrias || [] });
+            return post(cred(sesion, { accion: 'enviarVisita', visita: payloadVisita(f), geometrias: f.geometrias_envio || f.geometrias || [] }));
           }).then(function (r) {
+            if (!r.ok && r.auth) {
+              f.estado = 'pendiente';
+              return DB.put('fichas', f).then(function () { return DB.kvSet('authError', r.error); }).then(function () { resumen.ok = false; resumen.motivo = r.error; return false; });
+            }
             if (r.ok) {
               f.estado = 'enviada'; f.enviada_en = new Date().toISOString();
               f.id_evento_servidor = r.id_evento; f.avisos = r.avisos || []; f.error = '';
@@ -120,10 +138,11 @@ var Sync = (function () {
           if (seguir === false) return false;
           avisar({ tipo: 'foto', id: foto.id_foto, visita: foto.id_visita, estado: 'subiendo' });
           return base64DeBlob(foto.blob).then(function (b64) {
-            return post({ accion: 'subirFoto', codigo: sesion.codigo, foto: {
+            return post(cred(sesion, { accion: 'subirFoto', foto: {
               id_foto: foto.id_foto, id_visita: foto.id_visita, etiqueta: foto.etiqueta || '',
-              fecha: foto.fecha, latitud: foto.lat, longitud: foto.lon, mime: foto.blob.type || 'image/jpeg', base64: b64 } }, 120000);
+              fecha: foto.fecha, latitud: foto.lat, longitud: foto.lon, mime: foto.blob.type || 'image/jpeg', base64: b64 } }), 120000);
           }).then(function (r) {
+            if (!r.ok && r.auth) { resumen.ok = false; resumen.motivo = r.error; return DB.kvSet('authError', r.error).then(function () { return false; }); }
             if (r.ok) { foto.estado = 'enviada'; foto.enlace = r.enlace; foto.error = ''; resumen.fotos++; }
             else { foto.error = r.error; if (!r.reintentar) foto.estado = 'error'; }
             return DB.put('fotos', foto).then(function () { avisar({ tipo: 'foto', id: foto.id_foto, visita: foto.id_visita, estado: foto.estado }); return true; });
@@ -131,18 +150,18 @@ var Sync = (function () {
         });
       }, Promise.resolve(true));
     }).then(function () {
-      if (resumen.enviadas) return refrescarEventos(sesion.codigo).catch(function () {});
+      if (resumen.enviadas) return refrescarEventos(sesion).catch(function () {});
     }).then(function () {
       return DB.kvSet('ultimaSync', Date.now());
     }).then(function () {
       corriendo = false; avisar({ tipo: 'fin', resumen: resumen }); return resumen;
     }, function (e) {
       corriendo = false;
-      var r = { ok: false, motivo: e.message || String(e), offline: !!e.red };
+      var r = { ok: false, motivo: e.message || String(e), offline: !!e.red, auth: !!e.auth };
       avisar({ tipo: 'fin', resumen: r }); return r;
     });
     return actual;
   }
 
-  return { sincronizar: sincronizar, post: post, refrescarEventos: refrescarEventos, payloadVisita: payloadVisita, ErrorRed: ErrorRed };
+  return { cred: cred, sincronizar: sincronizar, post: post, refrescarEventos: refrescarEventos, payloadVisita: payloadVisita, ErrorRed: ErrorRed };
 })();

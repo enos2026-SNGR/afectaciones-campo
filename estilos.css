@@ -106,7 +106,7 @@ main { padding: 16px 16px calc(env(safe-area-inset-bottom) + 110px); max-width: 
 .op.sel { border-color: var(--azul); background: var(--azul-claro); color: #062a4a; box-shadow: inset 0 0 0 1px var(--azul); }
 .op.sel::before { content: "✓ "; font-weight: 800; }
 .op.estado-En\ curso.sel { border-color: var(--curso); }
-input[type=text], input[type=number], select, textarea {
+input[type=text], input[type=number], input[type=email], input[type=password], select, textarea {
   width: 100%; min-height: var(--toque); padding: 12px; border: 2px solid var(--linea); border-radius: 10px; background: var(--papel);
 }
 textarea { min-height: 110px; resize: vertical; }
