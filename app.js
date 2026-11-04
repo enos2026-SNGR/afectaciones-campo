@@ -243,15 +243,10 @@
           campoAcc('clave', 'Clave (mínimo 8 caracteres)', 'password', 'autocomplete="new-password"') +
           campoAcc('clave2', 'Repita la clave', 'password', 'autocomplete="new-password"') +
           '<button class="btn accion" id="go">Crear cuenta</button></div>';
-      } else {
-        cuerpo = '<div class="tarjeta"><p class="muted">Código asignado por el coordinador.</p>' +
-          campoAcc('codigo', 'Código', 'text', 'autocapitalize="characters" autocomplete="off"') + '<button class="btn primario" id="go">Entrar</button></div>';
       }
       $('#vista').innerHTML = tabs + cuerpo + '<div id="msg"></div>' +
-        (pestana !== 'codigo' ? '<p style="text-align:center"><button class="btn chico" style="border:0;margin:auto" id="conCodigo">Ingresar con código del coordinador</button></p>' : '<p style="text-align:center"><button class="btn chico" style="border:0;margin:auto" data-tab="ingresar">Ingresar con correo y clave</button></p>') +
         (CONFIG.BACKEND_URL ? '' : '<div class="aviso error">La app aún no tiene configurado el servidor. Avise al coordinador.</div>');
       $$('[data-tab]').forEach(function (b) { b.onclick = function () { vistaAcceso(b.getAttribute('data-tab')); }; });
-      if ($('#conCodigo')) $('#conCodigo').onclick = function () { vistaAcceso('codigo'); };
       var go = $('#go');
       if (pestana === 'ingresar') {
         $('#olvide').onclick = function () { vistaRecuperar($('#correo').value.trim()); };
@@ -275,16 +270,6 @@
             if (!r.ok) throw new Error(r.error);
             vistaCodigo(r.correo, 'verificar', r.mensaje);
           }).catch(function (e) { ocupado(go, false); msgAcc(esc(e.message)); });
-        };
-      } else {
-        go.onclick = function () {
-          var c = $('#codigo').value.trim().toUpperCase(); if (!c) return;
-          if (sinSenal()) return;
-          ocupado(go, true);
-          Sync.post({ accion: 'validarTecnico', codigo: c }).then(function (r) {
-            if (!r.ok) throw new Error(r.error);
-            return entrarCon({ tipo: 'codigo', codigo: r.codigo, nombre: r.nombre });
-          }).catch(function (e) { ocupado(go, false); msgAcc(esc(e.message || 'No se pudo validar')); });
         };
       }
     });
