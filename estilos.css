@@ -1,12 +1,14 @@
 :root {
-  --tinta: #0d1b2a;
+  --tinta: #252e39;
   --tinta-2: #44546a;
-  --fondo: #f3f5f8;
+  --fondo: #efefef;
   --papel: #ffffff;
   --linea: #c9d2de;
-  --azul: #0b4f8a;
-  --azul-claro: #e3eef9;
-  --accion: #c2410c;
+  --azul: #013254;
+  --marino: #272965;
+  --oro: #fcb300;
+  --azul-claro: #e1ecf3;
+  --accion: #fcb300;
   --ok: #15803d;
   --ok-claro: #dcfce7;
   --alerta: #b45309;
@@ -32,11 +34,14 @@ button { cursor: pointer; }
 
 /* Barra superior */
 .barra {
-  position: sticky; top: 0; z-index: 900; display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px;
   padding: calc(env(safe-area-inset-top) + 10px) 16px 10px; background: var(--azul); color: #fff;
 }
-.marca { background: #fff; border-bottom: 1px solid var(--linea); padding: 10px 16px; text-align: center; }
+.cabecera { position: sticky; top: 0; z-index: 900; }
+.marca { background: #fff; border-bottom: 3px solid var(--oro); padding: 10px 16px; text-align: center; }
 .marca img { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; }
+.marca.compacta { padding: 5px 16px; }
+.marca.compacta img { width: auto; height: 30px; max-width: 100%; }
 .barra h1 { font-size: 17px; margin: 0; flex: 1; font-weight: 650; line-height: 1.2; }
 .barra .volver { background: none; border: 0; color: #fff; font-size: 26px; min-width: 44px; min-height: 44px; padding: 0; }
 .pildora { font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 99px; background: rgba(255,255,255,.18); white-space: nowrap; }
@@ -52,7 +57,7 @@ main { padding: 16px 16px calc(env(safe-area-inset-bottom) + 110px); max-width: 
 .aviso.alerta { background: var(--alerta-claro); border-color: var(--alerta); color: #5c2d00; }
 .aviso.error { background: var(--error-claro); border-color: var(--error); color: #6b0f0f; }
 .aviso.ok { background: var(--ok-claro); border-color: var(--ok); color: #0b3d1e; }
-.aviso.info { background: var(--azul-claro); border-color: var(--azul); color: #062a4a; }
+.aviso.info { background: var(--azul-claro); border-color: var(--azul); color: var(--azul); }
 .aviso button { margin-top: 8px; }
 .muted { color: var(--tinta-2); font-size: 15px; }
 
@@ -63,7 +68,7 @@ main { padding: 16px 16px calc(env(safe-area-inset-bottom) + 110px); max-width: 
   background: var(--papel); color: var(--azul); font-weight: 650; font-size: 17px; text-align: center;
 }
 .btn.primario { background: var(--azul); color: #fff; }
-.btn.accion { background: var(--accion); border-color: var(--accion); color: #fff; }
+.btn.accion { background: var(--accion); border-color: var(--accion); color: var(--marino); }
 .btn.peligro { border-color: var(--error); color: var(--error); }
 .btn.chico { min-height: 44px; font-size: 15px; padding: 8px 12px; width: auto; }
 .btn:disabled { opacity: .45; }
@@ -105,14 +110,14 @@ main { padding: 16px 16px calc(env(safe-area-inset-bottom) + 110px); max-width: 
   min-height: 52px; padding: 10px 12px; border-radius: 10px; border: 2px solid var(--linea); background: var(--papel);
   text-align: left; font-weight: 550; font-size: 16px; line-height: 1.25;
 }
-.op.sel { border-color: var(--azul); background: var(--azul-claro); color: #062a4a; box-shadow: inset 0 0 0 1px var(--azul); }
+.op.sel { border-color: var(--azul); background: var(--azul-claro); color: var(--azul); box-shadow: inset 0 0 0 1px var(--azul); }
 .op.sel::before { content: "✓ "; font-weight: 800; }
 .op.estado-En\ curso.sel { border-color: var(--curso); }
 input[type=text], input[type=number], input[type=email], input[type=password], select, textarea {
   width: 100%; min-height: var(--toque); padding: 12px; border: 2px solid var(--linea); border-radius: 10px; background: var(--papel);
 }
 textarea { min-height: 110px; resize: vertical; }
-input:focus, select:focus, textarea:focus { outline: 3px solid #93c5fd; border-color: var(--azul); }
+input:focus, select:focus, textarea:focus { outline: 3px solid var(--oro); border-color: var(--azul); }
 
 /* Contador */
 .contador { background: var(--papel); border: 1px solid var(--linea); border-radius: var(--radio); padding: 12px; margin-bottom: 10px; }

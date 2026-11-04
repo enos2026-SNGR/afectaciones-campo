@@ -121,7 +121,8 @@
     $('#btnVolver').onclick = volver || null;
   }
   // Franja institucional: solo en instalación, acceso e inicio
-  function marca(ver) { var m = $('#marca'); if (m) m.hidden = !ver; }
+  // Franja institucional visible en todas las pantallas: completa en acceso e inicio, compacta en el resto
+  function marca(completa) { var m = $('#marca'); if (m) { m.hidden = false; m.classList.toggle('compacta', !completa); } }
   function limpiarVista() {
     marca(false);
     detenerGPS();
@@ -462,7 +463,7 @@
             .bindPopup('<b>' + esc(e.sector || e.parroquia) + '</b><br>' + esc(e.estado) + '<br><button class="btn chico primario" data-sel="' + esc(e.id_evento) + '">Actualizar este</button>')
             .addTo(grupo);
         });
-        if (ultimaPos) L.circleMarker([ultimaPos.lat, ultimaPos.lon], { radius: 7, color: '#0b4f8a', fillColor: '#60a5fa', fillOpacity: 1 }).addTo(S.mapa);
+        if (ultimaPos) L.circleMarker([ultimaPos.lat, ultimaPos.lon], { radius: 7, color: '#013254', fillColor: '#60a5fa', fillOpacity: 1 }).addTo(S.mapa);
         if (eventos.length) S.mapa.fitBounds(grupo.getBounds().pad(0.3), { maxZoom: 17 });
         agregarLeyenda(S.mapa);
         S.mapa.on('popupopen', function (ev) {
@@ -1000,7 +1001,7 @@
 
     function pintarFicha() {
       capaFicha.clearLayers();
-      var color = COLOR_ESTADO[f.valores['Estado del Evento']] || '#0b4f8a';
+      var color = COLOR_ESTADO[f.valores['Estado del Evento']] || '#013254';
       if (u) L.circleMarker([u.lat, u.lon], { radius: 9, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 }).addTo(capaFicha);
       f.geometrias.forEach(function (g) {
         var ll = g.coordenadas.map(function (c) { return [c[1], c[0]]; });
@@ -1024,8 +1025,8 @@
     function pintarTemp() {
       capaTemp.clearLayers();
       var ll = verts.map(function (c) { return [c[1], c[0]]; });
-      ll.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#0b4f8a', fillColor: '#fff', fillOpacity: 1 }).addTo(capaTemp); });
-      if (ll.length > 1) (modo === 'tramo' ? L.polyline(ll, { color: '#0b4f8a', weight: 6 }) : L.polygon(ll, { color: '#0b4f8a', weight: 3, dashArray: '6 4', fillOpacity: .15 })).addTo(capaTemp);
+      ll.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#013254', fillColor: '#fff', fillOpacity: 1 }).addTo(capaTemp); });
+      if (ll.length > 1) (modo === 'tramo' ? L.polyline(ll, { color: '#013254', weight: 6 }) : L.polygon(ll, { color: '#013254', weight: 3, dashArray: '6 4', fillOpacity: .15 })).addTo(capaTemp);
     }
     function herramientas() {
       var h;
