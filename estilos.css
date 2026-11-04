@@ -35,6 +35,8 @@ button { cursor: pointer; }
   position: sticky; top: 0; z-index: 900; display: flex; align-items: center; gap: 10px;
   padding: calc(env(safe-area-inset-top) + 10px) 16px 10px; background: var(--azul); color: #fff;
 }
+.marca { background: #fff; border-bottom: 1px solid var(--linea); padding: 10px 16px; text-align: center; }
+.marca img { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; }
 .barra h1 { font-size: 17px; margin: 0; flex: 1; font-weight: 650; line-height: 1.2; }
 .barra .volver { background: none; border: 0; color: #fff; font-size: 26px; min-width: 44px; min-height: 44px; padding: 0; }
 .pildora { font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 99px; background: rgba(255,255,255,.18); white-space: nowrap; }

@@ -1,11 +1,11 @@
 /* Service worker: abre la app sin conexión, guarda teselas del mapa y sincroniza en segundo plano (Android) */
 importScripts('config.js', 'db.js', 'sync.js');
 
-var APP = 'campo-app-v5';
+var APP = 'campo-app-v6';
 var TESELAS = 'campo-teselas-v2';
 var ARCHIVOS = [
   './', 'index.html', 'app.js', 'estilos.css', 'config.js', 'catalogos.js', 'db.js', 'sync.js',
-  'manifest.webmanifest', 'icons/icono-192.png', 'icons/icono-512.png',
+  'manifest.webmanifest', 'icons/icono-192.png', 'icons/icono-512.png', 'img/logo-sngr.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
   'datos/parroquias.geojson'
 ];

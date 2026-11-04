@@ -120,7 +120,10 @@
     $('#btnVolver').hidden = !volver;
     $('#btnVolver').onclick = volver || null;
   }
+  // Franja institucional: solo en instalación, acceso e inicio
+  function marca(ver) { var m = $('#marca'); if (m) m.hidden = !ver; }
   function limpiarVista() {
+    marca(false);
     detenerGPS();
     if (S.detenerExtra) { S.detenerExtra(); S.detenerExtra = null; }
     if (S.mapa) { S.mapa.remove(); S.mapa = null; }
@@ -176,7 +179,7 @@
       /[?&]dev=1/.test(location.search);
   }
   function vistaInstalar() {
-    limpiarVista(); titulo('Instalar la app');
+    limpiarVista(); marca(true); titulo('Instalar la app');
     // iPadOS se presenta como Mac: se reconoce por la pantalla táctil
     var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
     var tIos = '<div class="tarjeta"><h2>En iPhone o iPad</h2><ol>' +
@@ -223,7 +226,7 @@
   function ocupado(b, si) { b.disabled = si; if (si) msgAcc('<span class="muted">Procesando…</span>', 'info'); }
 
   function vistaAcceso(pestana) {
-    limpiarVista(); titulo('Acceso');
+    limpiarVista(); marca(true); titulo('Acceso');
     pestana = pestana || 'ingresar';
     DB.kvGet('ultimoCorreo').then(function (ultimo) {
       var tabs = '<div class="fila-btn" style="margin-bottom:14px">' +
@@ -279,7 +282,7 @@
 
   // Código único de administrador: todos los permisos
   function vistaAdmin() {
-    limpiarVista(); titulo('Administrador', function () { vistaAcceso('ingresar'); });
+    limpiarVista(); marca(true); titulo('Administrador', function () { vistaAcceso('ingresar'); });
     $('#vista').innerHTML = '<div class="tarjeta"><p class="muted">Código único de administrador (hoja Configuración, CODIGO_ADMINISTRADOR).</p>' +
       campoAcc('adm', 'Código de administrador', 'password', 'autocomplete="off" autocapitalize="characters"') +
       '<button class="btn primario" id="go">Ingresar</button></div><div id="msg"></div>';
@@ -337,7 +340,7 @@
   // Inicio
   // ----------------------------------------------------------------
   function vistaInicio() {
-    limpiarVista(); marcar('inicio'); S.pila = []; titulo('Afectaciones Galápagos');
+    limpiarVista(); marca(true); marcar('inicio'); S.pila = []; titulo('Afectaciones Galápagos');
     var ahora = Date.now();
     var borr = S.fichas.filter(function (f) { return f.estado === 'borrador'; });
     var pend = S.fichas.filter(function (f) { return f.estado === 'pendiente' || f.estado === 'enviando'; });
