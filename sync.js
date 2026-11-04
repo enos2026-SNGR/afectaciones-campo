@@ -110,6 +110,11 @@ var Sync = (function () {
               f.estado = 'pendiente';
               return DB.put('fichas', f).then(function () { return DB.kvSet('authError', r.error); }).then(function () { resumen.ok = false; resumen.motivo = r.error; return false; });
             }
+            if (!r.ok && r.ocupado) {
+              // Servidor con fila: se detiene la ronda y se reintenta más tarde sin marcar error
+              f.estado = 'pendiente'; f.error = '';
+              return DB.put('fichas', f).then(function () { resumen.ok = false; resumen.ocupado = true; resumen.motivo = r.error; return false; });
+            }
             if (r.ok) {
               f.estado = 'enviada'; f.enviada_en = new Date().toISOString();
               f.id_evento_servidor = r.id_evento; f.avisos = r.avisos || []; f.error = '';
@@ -143,6 +148,7 @@ var Sync = (function () {
               fecha: foto.fecha, latitud: foto.lat, longitud: foto.lon, mime: foto.blob.type || 'image/jpeg', base64: b64 } }), 120000);
           }).then(function (r) {
             if (!r.ok && r.auth) { resumen.ok = false; resumen.motivo = r.error; return DB.kvSet('authError', r.error).then(function () { return false; }); }
+            if (!r.ok && r.ocupado) { resumen.ok = false; resumen.ocupado = true; resumen.motivo = r.error; return false; }
             if (r.ok) { foto.estado = 'enviada'; foto.enlace = r.enlace; foto.error = ''; resumen.fotos++; }
             else { foto.error = r.error; if (!r.reintentar) foto.estado = 'error'; }
             return DB.put('fotos', foto).then(function () { avisar({ tipo: 'foto', id: foto.id_foto, visita: foto.id_visita, estado: foto.estado }); return true; });

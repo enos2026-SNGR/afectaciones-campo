@@ -401,6 +401,7 @@
     if (!navigator.onLine) { if (!silencioso) toast('Sin señal. Se enviará cuando haya conexión.'); return Promise.resolve(); }
     if (!silencioso) toast('Enviando…');
     return Sync.sincronizar().then(function (r) {
+      if (r && r.ocupado) reintentarLuego();
       return cargarDatos().then(function () {
         actualizarConexion();
         if (!silencioso) {
@@ -411,6 +412,13 @@
         if (vistaActual === 'mis') vistaMisFichas();
       });
     });
+  }
+  // Reintento escalonado: cada teléfono espera un tiempo distinto para no llegar todos al mismo segundo
+  var reintentoProgramado = null;
+  function reintentarLuego(minSeg, maxSeg) {
+    if (reintentoProgramado) return;
+    var ms = ((minSeg || 20) + Math.random() * ((maxSeg || 60) - (minSeg || 20))) * 1000;
+    reintentoProgramado = setTimeout(function () { reintentoProgramado = null; if (S.sesion && navigator.onLine) enviarAhora(true); }, ms);
   }
   var vistaActual = '';
   function marcar(v) { vistaActual = v; }
@@ -1467,7 +1475,7 @@
   // ----------------------------------------------------------------
   function arrancar() {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
-    window.addEventListener('online', function () { actualizarConexion(); enviarAhora(true); });
+    window.addEventListener('online', function () { actualizarConexion(); if (S.sesion) reintentarLuego(1, 15); });
     window.addEventListener('offline', actualizarConexion);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && S.sesion && vistaActual !== 'ficha') enviarAhora(true);
