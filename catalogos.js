@@ -1,10 +1,6 @@
 /* Listas cerradas y definiciones. Deben coincidir con CATALOGOS en el backend (Code.gs). */
 var CATALOGOS = {
-  parroquias: {
-    'SAN CRISTÓBAL': ['PUERTO BAQUERIZO MORENO', 'EL PROGRESO', 'ISLA SANTA MARÍA FLOREANA'],
-    'SANTA CRUZ': ['PUERTO AYORA', 'BELLA VISTA', 'SANTA ROSA'],
-    'ISABELA': ['PUERTO VILLAMIL', 'TOMÁS DE BERLANGA']
-  },
+  'Tipo de Evento': ['Inundación', 'Movimiento en masa'],
   'Origen': ['Lluvia intensa', 'Oleaje o aguaje', 'Lluvia y oleaje combinados', 'No determinado'],
   'Nivel del Agua': ['Sin agua', 'Hasta el tobillo (menos de 0,30 m)', 'Hasta la rodilla (0,30 a 0,50 m)',
                      'Hasta la cintura (0,50 a 1 m)', 'Sobre la cintura (más de 1 m)'],
@@ -62,7 +58,7 @@ var DEFINICIONES = {
       ['En curso', 'La afectación sigue creciendo o hay agua presente.'],
       ['En atención', 'Hay respuesta en el sitio, como bombeo, limpieza o albergue.'],
       ['Estabilizado', 'El agua se retiró y no hay evolución, pero persisten consecuencias, por ejemplo familias albergadas o servicios sin restablecer.'],
-      ['Cerrado', 'Sin afectación vigente. El técnico no lo elige: solicita el cierre y el coordinador lo confirma.']
+      ['Cerrado', 'Sin afectación vigente. El técnico no lo elige: solicita el cierre y el administrador lo confirma.']
     ]
   },
   'personas': {
@@ -112,7 +108,7 @@ var DEFINICIONES = {
       ['Afectación atendida', 'La respuesta terminó y no queda afectación vigente.'],
       ['Sin afectación verificada', 'Al llegar al sitio no se encontró afectación (falsa alarma).']
     ],
-    nota: 'El evento sigue contando en los reportes hasta que el coordinador confirme el cierre.'
+    nota: 'El evento sigue contando en los reportes hasta que el administrador confirme el cierre.'
   },
   'baja': {
     titulo: 'Baja de una cifra de afectación',
@@ -125,26 +121,3 @@ var DEFINICIONES = {
   }
 };
 
-// Islas para preseleccionar el cantón sin conexión (el técnico confirma la parroquia)
-var ISLAS = [
-  { canton: 'SANTA CRUZ', caja: [-90.60, -0.82, -90.12, -0.38] },   // Santa Cruz y Baltra
-  { canton: 'SAN CRISTÓBAL', caja: [-89.68, -0.98, -89.20, -0.66] }, // San Cristóbal
-  { canton: 'SAN CRISTÓBAL', caja: [-90.55, -1.38, -90.36, -1.20] }, // Floreana
-  { canton: 'ISABELA', caja: [-91.70, -1.10, -90.75, 0.20] }         // Isabela y Fernandina
-];
-
-// Zonas pobladas para preparar el mapa sin conexión [oeste, sur, este, norte]
-var ZONAS_MAPA = [
-  { nombre: 'Puerto Ayora', caja: [-90.345, -0.765, -90.285, -0.720] },
-  { nombre: 'Bellavista', caja: [-90.345, -0.705, -90.305, -0.675] },
-  { nombre: 'Santa Rosa', caja: [-90.420, -0.670, -90.385, -0.640] },
-  { nombre: 'Puerto Baquerizo Moreno', caja: [-89.630, -0.920, -89.590, -0.885] },
-  { nombre: 'El Progreso', caja: [-89.565, -0.925, -89.530, -0.895] },
-  { nombre: 'Puerto Villamil', caja: [-90.990, -0.970, -90.940, -0.940] },
-  { nombre: 'Tomás de Berlanga', caja: [-91.045, -0.875, -91.000, -0.835] },
-  { nombre: 'Puerto Velasco Ibarra (Floreana)', caja: [-90.500, -1.285, -90.475, -1.265] }
-];
-var ISLAS_MAPA = [
-  [-90.60, -0.82, -90.12, -0.38], [-89.68, -0.98, -89.20, -0.66],
-  [-90.55, -1.38, -90.36, -1.20], [-91.25, -1.10, -90.75, -0.75]
-];

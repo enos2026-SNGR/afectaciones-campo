@@ -1,4 +1,4 @@
-/* App de campo: registro de afectaciones por inundaciones, Galápagos */
+/* App de campo: registro de afectaciones en territorio, SNGR (todo el país) */
 (function () {
   'use strict';
 
@@ -17,7 +17,7 @@
   function dos(n) { return (n < 10 ? '0' : '') + n; }
   function idEvento() {
     var d = new Date();
-    return 'GAL-' + d.getFullYear() + dos(d.getMonth() + 1) + dos(d.getDate()) + '-' + dos(d.getHours()) + dos(d.getMinutes()) + '-' + uuid().slice(0, 4).toUpperCase();
+    return 'AF-' + d.getFullYear() + dos(d.getMonth() + 1) + dos(d.getDate()) + '-' + dos(d.getHours()) + dos(d.getMinutes()) + '-' + uuid().slice(0, 4).toUpperCase();
   }
   function hace(ms) {
     if (!ms) return 'nunca';
@@ -44,6 +44,15 @@
     return 2 * R * Math.asin(Math.sqrt(a));
   }
   function metros(m) { return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km'; }
+  // Distancia aproximada en metros de un punto a un segmento [lon, lat] (proyección local)
+  function distanciaASegmento(lat, lon, a, b) {
+    var k = 111320, c = Math.cos(lat * Math.PI / 180);
+    var ax = (a[0] - lon) * k * c, ay = (a[1] - lat) * k, bx = (b[0] - lon) * k * c, by = (b[1] - lat) * k;
+    var dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+    var t = l ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l)) : 0;
+    var px = ax + t * dx, py = ay + t * dy;
+    return Math.sqrt(px * px + py * py);
+  }
   function puntoEnAnillo(lon, lat, anillo) {
     var dentro = false;
     for (var i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
@@ -68,7 +77,7 @@
   var VACIO = {};
   var LISTAS = ['Origen', 'Nivel del Agua', 'Tendencia del Agua', 'Estado del Evento', 'Solicitud de Cierre',
     'Agua Potable', 'Alcantarillado o Pozos Sépticos', 'Energía Eléctrica', 'Telefonía e Internet', 'Vía de Acceso',
-    'Funcionamiento Edificaciones Públicas', 'Funcionamiento Muelles', 'Justificación de Baja', 'Cantón', 'Parroquia', 'Sector', 'Descripción'];
+    'Funcionamiento Edificaciones Públicas', 'Funcionamiento Muelles', 'Justificación de Baja', 'Provincia', 'Código Parroquia', 'Cantón', 'Parroquia', 'Sector', 'Descripción', 'Tipo de Evento'];
   var CIFRAS = Object.keys(ETIQUETAS);
   var MULTI = ['Grupos Prioritarios', 'Necesidades Inmediatas'];
   LISTAS.forEach(function (k) { VACIO[k] = ''; });
@@ -129,7 +138,7 @@
     marca(false);
     detenerGPS();
     if (S.detenerExtra) { S.detenerExtra(); S.detenerExtra = null; }
-    S.alUbicar = null;
+    S.alUbicar = null; S.alTipo = null;
     document.body.classList.remove('dibujando');
     if (S.mapa) { S.mapa.remove(); S.mapa = null; }
     $('#navpasos').innerHTML = '';
@@ -204,7 +213,7 @@
     if (b) b.onclick = function () { if (promptInstalar) { promptInstalar.prompt(); promptInstalar.userChoice.then(function () { promptInstalar = null; }); } };
   }
 
-  // Acceso: cuenta con correo y clave (registro propio) o código asignado por el coordinador
+  // Acceso: cuenta con correo y clave (registro propio) o código de administrador
   function campoAcc(id, et, tipo, extra) {
     return '<div class="campo"><label for="' + id + '">' + et + '</label><input type="' + (tipo || 'text') + '" id="' + id + '" ' + (extra || '') + '></div>';
   }
@@ -294,7 +303,7 @@
           '<button class="btn" id="olvide" style="border:0">Olvidé mi clave</button></div>' +
           '<p style="text-align:center"><button class="btn chico" id="admin" style="border:0;margin:auto">Ingresar con código de administrador</button></p>';
       } else if (pestana === 'registro') {
-        cuerpo = '<div class="tarjeta"><p class="muted">Con correo institucional (@gestionderiesgos.gob.ec) el acceso es inmediato al verificar el correo. Con otro correo, el coordinador debe aprobarlo.</p>' +
+        cuerpo = '<div class="tarjeta"><p class="muted">Con correo institucional (@gestionderiesgos.gob.ec) el acceso es inmediato al verificar el correo. Con otro correo, el administrador debe aprobarlo.</p>' +
           campoAcc('nombre', 'Nombres y apellidos', 'text', 'autocomplete="name"') +
           campoAcc('correo', 'Correo electrónico', 'email', 'autocomplete="email" inputmode="email"') +
           campoAcc('inst', 'Institución', 'text', 'placeholder="Ej.: SNGR, GAD Santa Cruz, Cuerpo de Bomberos"') +
@@ -303,7 +312,7 @@
           '<button class="btn accion" id="go">Crear cuenta</button></div>';
       }
       $('#vista').innerHTML = tabs + cuerpo + '<div id="msg"></div>' +
-        (CONFIG.BACKEND_URL ? '' : '<div class="aviso error">La app aún no tiene configurado el servidor. Avise al coordinador.</div>');
+        (CONFIG.BACKEND_URL ? '' : '<div class="aviso error">La app aún no tiene configurado el servidor. Avise al administrador.</div>');
       $$('[data-tab]').forEach(function (b) { b.onclick = function () { vistaAcceso(b.getAttribute('data-tab')); }; });
       var go = $('#go');
       if (pestana === 'ingresar') {
@@ -401,7 +410,7 @@
   // Inicio
   // ----------------------------------------------------------------
   function vistaInicio() {
-    limpiarVista(); marca(true); marcar('inicio'); S.pila = []; titulo('Afectaciones Galápagos');
+    limpiarVista(); marca(true); marcar('inicio'); S.pila = []; titulo('Registro de afectaciones');
     var ahora = Date.now();
     var borr = S.fichas.filter(function (f) { return f.estado === 'borrador'; });
     var pend = S.fichas.filter(function (f) { return f.estado === 'pendiente' || f.estado === 'enviando'; });
@@ -417,7 +426,7 @@
     if (errs.length) h += '<div class="aviso error">' + errs.length + ' ficha(s) con error que requieren su revisión.<button class="btn chico" data-ir="mis">Revisar</button></div>';
     if (borrViejo) h += '<div class="aviso alerta">Tiene borradores sin enviar desde hace más de ' + CONFIG.BORRADOR_RECORDATORIO_H + ' hora. Esa información no llega al COE hasta que la envíe.<button class="btn chico" data-ir="mis">Ver borradores</button></div>';
     if (pendViejo) h += '<div class="aviso alerta">Hay fichas sin enviar desde hace más de ' + CONFIG.RESPALDO_SUGERIDO_H + ' horas. Exporte un respaldo a otro teléfono por si este se pierde o se daña.<button class="btn chico" data-ir="respaldo">Exportar respaldo</button></div>';
-    if (rechazos.length) h += '<div class="aviso info">El coordinador rechazó el cierre de ' + rechazos.length + ' evento(s). Revise el motivo en la lista de eventos.</div>';
+    if (rechazos.length) h += '<div class="aviso info">El administrador rechazó el cierre de ' + rechazos.length + ' evento(s). Revise el motivo en la lista de eventos.</div>';
 
     h += '<div class="estado-grid">' +
       '<div class="dato' + (vieja ? ' rojo' : '') + '"><div class="rot">Eventos actualizados</div><div style="font-weight:750">' + hace(S.eventosHora) + '</div>' +
@@ -560,6 +569,8 @@
       f.valores = Object.assign(clon(VACIO), clon(evento.valores || {}));
       f.valores['Solicitud de Cierre'] = ''; f.valores['Justificación de Baja'] = ''; f.valores['Descripción'] = '';
       f.valores['Cantón'] = evento.canton; f.valores['Parroquia'] = evento.parroquia; f.valores['Sector'] = evento.sector;
+      f.valores['Provincia'] = evento.provincia || ''; f.valores['Código Parroquia'] = evento.cod_parroquia || '';
+      f.valores['Tipo de Evento'] = evento.tipo_evento || 'Inundación';
       f.base = clon(f.valores);
       f.ubicacion = { lat: evento.lat, lon: evento.lon, precision: null, metodo: evento.metodo || 'GPS', delEvento: true };
       f.geometrias = (evento.geometrias || []).map(geomDeServidor);
@@ -624,7 +635,7 @@
     if (f.tipo !== 'INICIAL') {
       cab = '<div class="aviso info">' + (f.tipo === 'ACTUALIZACION' ? 'Actualiza el evento' : 'Corrige su visita del evento') + ' <b>' + esc(f.valores['Sector'] || f.id_evento) + '</b>. ' +
         (f.tipo === 'ACTUALIZACION' ? 'Los valores vienen de la última visita: cambie solo lo que cambió.' : 'Cambie solo los datos que estaban errados.') + '</div>';
-      if (f.evento_ref && f.evento_ref.cierre === 'RECHAZADO') cab += '<div class="aviso alerta">El coordinador rechazó el cierre: ' + esc(f.evento_ref.rechazo) + '.</div>';
+      if (f.evento_ref && f.evento_ref.cierre === 'RECHAZADO') cab += '<div class="aviso alerta">El administrador rechazó el cierre: ' + esc(f.evento_ref.rechazo) + '.</div>';
     }
     $('#vista').innerHTML = prog + '<h2 class="paso-titulo">' + PASOS[n - 1].t + '</h2>' + cab + '<div id="cuerpo"></div>';
     PASOS[n - 1].f($('#cuerpo'));
@@ -739,32 +750,72 @@
   }
 
   // ---------------- Paso 1: Ubicación ----------------
+  // Listas territoriales desde DPA (datos/dpa.js): provincia > cantón > parroquia, con códigos CONALI
+  function opcionesDPA(dic, sel, vacio) {
+    return '<option value="">' + vacio + '</option>' + Object.keys(dic).sort(function (a, b) { return nombreDPA(dic[a]).localeCompare(nombreDPA(dic[b]), 'es'); })
+      .map(function (k) { return '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + esc(nombreDPA(dic[k])) + '</option>'; }).join('');
+  }
+  function nombreDPA(x) { return typeof x === 'string' ? x : x.n; }
+  function fijarParroquia(cod) {
+    var v = S.ficha.valores;
+    if (!cod) { v['Código Parroquia'] = ''; v['Parroquia'] = ''; return; }
+    var pv = DPA[cod.slice(0, 2)], ca = pv && pv.c[cod.slice(0, 4)];
+    if (!ca || !ca.p[cod]) return;
+    v['Provincia'] = pv.n; v['Cantón'] = ca.n; v['Parroquia'] = ca.p[cod]; v['Código Parroquia'] = cod;
+  }
+  function codProvincia() { var c = S.ficha.valores['Código Parroquia']; return c ? c.slice(0, 2) : (S.selProv || ''); }
+  function codCanton() { var c = S.ficha.valores['Código Parroquia']; return c ? c.slice(0, 4) : (S.selCant || ''); }
+  function pintarSelectsDPA() {
+    if (!$('#selProv')) return;
+    var pv = codProvincia(), ca = codCanton(), pa = S.ficha.valores['Código Parroquia'];
+    $('#selProv').innerHTML = opcionesDPA(DPA, pv, 'Elegir…');
+    $('#selCanton').innerHTML = pv ? opcionesDPA(DPA[pv].c, ca, 'Elegir…') : '<option value="">Primero elija la provincia</option>';
+    $('#selParroquia').innerHTML = ca && pv ? opcionesDPA(DPA[pv].c[ca].p, pa, 'Elegir…') : '<option value="">Primero elija el cantón</option>';
+  }
+
   function pasoUbicacion(cuerpo) {
     var f = S.ficha;
     var h = '';
     if (f.tipo === 'ACTUALIZACION') {
-      h += '<div class="tarjeta"><b>' + esc(f.valores['Parroquia']) + ', ' + esc(f.valores['Cantón']) + '</b><br><span class="muted">La ubicación del evento ya está registrada.</span></div>';
-      cuerpo.innerHTML = h + campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio Las Ninfas, calle Charles Binford');
+      h += '<div class="tarjeta"><span class="chip">' + esc(f.valores['Tipo de Evento'] || 'Inundación') + '</span><br><b>' + esc(f.valores['Parroquia']) + ', ' + esc(f.valores['Cantón']) + (f.valores['Provincia'] ? ', ' + esc(f.valores['Provincia']) : '') + '</b><br><span class="muted">La ubicación del evento ya está registrada.</span></div>';
+      cuerpo.innerHTML = h + campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio Las Ninfas, calle principal');
       enlazarTexto(cuerpo);
       return;
     }
+    if (f.tipo === 'INICIAL') {
+      h += '<div class="campo" data-campo="Tipo de Evento"><div class="etq">Tipo de evento <span class="oblig">*</span></div><div class="opciones una">' +
+        CATALOGOS['Tipo de Evento'].map(function (o) { return '<button type="button" class="op' + (f.valores['Tipo de Evento'] === o ? ' sel' : '') + '" data-tipoev="' + esc(o) + '">' + esc(o) + '</button>'; }).join('') + '</div></div>';
+    }
     h += '<div id="gps"></div>';
-    var cantones = Object.keys(CATALOGOS.parroquias);
-    h += '<div class="campo"><div class="etq">Cantón <span class="oblig">*</span></div><select id="selCanton"><option value="">Elegir…</option>' +
-      cantones.map(function (c) { return '<option' + (f.valores['Cantón'] === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></div>' +
+    h += '<div class="campo"><div class="etq">Provincia <span class="oblig">*</span></div><select id="selProv"></select></div>' +
+      '<div class="campo"><div class="etq">Cantón <span class="oblig">*</span></div><select id="selCanton"></select></div>' +
       '<div class="campo"><div class="etq">Parroquia <span class="oblig">*</span></div><select id="selParroquia"></select><p class="muted" id="msgParr"></p></div>' +
-      campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio Las Ninfas, calle Charles Binford');
+      campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio La Merced, calle principal');
     cuerpo.innerHTML = h;
     enlazarTexto(cuerpo);
-    function llenarParroquias() {
-      var c = f.valores['Cantón'];
-      var ps = CATALOGOS.parroquias[c] || [];
-      $('#selParroquia').innerHTML = '<option value="">' + (c ? 'Elegir…' : 'Primero elija el cantón') + '</option>' +
-        ps.map(function (p) { return '<option' + (f.valores['Parroquia'] === p ? ' selected' : '') + '>' + p + '</option>'; }).join('');
-    }
-    llenarParroquias();
-    $('#selCanton').onchange = function () { cambiar('Cantón', this.value); cambiar('Parroquia', ''); llenarParroquias(); };
-    $('#selParroquia').onchange = function () { cambiar('Parroquia', this.value); };
+    $$('[data-tipoev]', cuerpo).forEach(function (b) {
+      b.onclick = function () {
+        var t = b.getAttribute('data-tipoev'), antes = f.valores['Tipo de Evento'];
+        var hay = f.geometrias.some(function (g) { return formaGeo(g.tipo) !== 'poligono'; });
+        var seguir = t === 'Movimiento en masa' && hay ? confirmar('En movimiento en masa solo se dibuja el área afectada. Se quitarán los tramos, cauces y puntos dibujados.', 'Cambiar') : Promise.resolve(true);
+        seguir.then(function (ok) {
+          if (!ok) return;
+          f.valores['Tipo de Evento'] = t;
+          if (t === 'Movimiento en masa') {
+            f.geometrias = f.geometrias.filter(function (g) { return formaGeo(g.tipo) === 'poligono'; });
+            ['Origen', 'Nivel del Agua', 'Tendencia del Agua'].forEach(function (c) { f.valores[c] = ''; });
+          }
+          guardar();
+          $$('[data-tipoev]', cuerpo).forEach(function (x) { x.classList.toggle('sel', x === b); });
+          if (antes !== t && S.alTipo) S.alTipo();
+        });
+      };
+    });
+    S.selProv = codProvincia(); S.selCant = codCanton();
+    pintarSelectsDPA();
+    $('#selProv').onchange = function () { S.selProv = this.value; S.selCant = ''; fijarParroquia(''); f.valores['Cantón'] = ''; f.valores['Provincia'] = this.value ? DPA[this.value].n : ''; guardar(); pintarSelectsDPA(); };
+    $('#selCanton').onchange = function () { S.selCant = this.value; fijarParroquia(''); f.valores['Cantón'] = this.value ? DPA[S.selProv].c[this.value].n : ''; guardar(); pintarSelectsDPA(); };
+    $('#selParroquia').onchange = function () { fijarParroquia(this.value); guardar(); };
     pintarGPS();
     if (f.tipo === 'INICIAL' && !(f.ubicacion && f.ubicacion.aceptada)) iniciarGPS();
   }
@@ -843,8 +894,8 @@
     var f = S.ficha;
     var m = modal('<h2>Toque el mapa en el sitio afectado</h2><div class="mapa" id="mMapa"></div><p class="muted" id="mPos">Sin punto marcado.</p>' +
       '<div class="fila-btn"><button class="btn" id="mNo">Cancelar</button><button class="btn primario" id="mSi" disabled>Usar este punto</button></div>');
-    var centro = f.ubicacion ? [f.ubicacion.lat, f.ubicacion.lon] : (S.gpsEstado && S.gpsEstado.mejor ? [S.gpsEstado.mejor.lat, S.gpsEstado.mejor.lon] : [-0.745, -90.313]);
-    var mapa = crearMapa($('#mMapa', m), centro, 16);
+    var centro = f.ubicacion ? [f.ubicacion.lat, f.ubicacion.lon] : (S.gpsEstado && S.gpsEstado.mejor ? [S.gpsEstado.mejor.lat, S.gpsEstado.mejor.lon] : null);
+    var mapa = crearMapa($('#mMapa', m), centro, centro ? 16 : 7);
     var punto = null, marcador = null;
     mapa.on('click', function (ev) {
       punto = { lat: ev.latlng.lat, lon: ev.latlng.lng };
@@ -855,25 +906,41 @@
     $('#mNo', m).onclick = function () { mapa.remove(); cerrarModal(); if (!(f.ubicacion && f.ubicacion.aceptada)) iniciarGPS(); pintarGPS(); };
     $('#mSi', m).onclick = function () { mapa.remove(); cerrarModal(); aceptarUbicacion(punto, 'Manual'); };
   }
+  // Detecta la parroquia con la capa parroquial simplificada (100 m); cerca de un límite puede fallar y se corrige a mano
   function detectarTerritorio(lat, lon) {
-    var f = S.ficha, canton = '', parroquia = '';
+    var f = S.ficha, cod = '';
     if (S.parroquias) {
-      S.parroquias.features.forEach(function (ft) {
+      S.parroquias.features.some(function (ft) {
         var g = ft.geometry, polis = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
-        polis.forEach(function (p) { if (puntoEnAnillo(lon, lat, p[0])) { canton = ft.properties.canton; parroquia = ft.properties.parroquia; } });
+        var en = polis.some(function (p) { return puntoEnAnillo(lon, lat, p[0]) && !p.slice(1).some(function (h) { return puntoEnAnillo(lon, lat, h); }); });
+        if (en && ft.properties.p !== 'ISLA') cod = ft.properties.p;
+        return en;
       });
     }
-    if (!canton) ISLAS.forEach(function (i) { var c = i.caja; if (lon >= c[0] && lon <= c[2] && lat >= c[1] && lat <= c[3]) canton = i.canton; });
-    if (canton) {
-      f.valores['Cantón'] = canton;
-      if (parroquia) f.valores['Parroquia'] = parroquia;
-      else if ((CATALOGOS.parroquias[canton] || []).indexOf(f.valores['Parroquia']) < 0) f.valores['Parroquia'] = '';
-      if ($('#selCanton')) {
-        $('#selCanton').value = canton;
-        var ps = CATALOGOS.parroquias[canton];
-        $('#selParroquia').innerHTML = '<option value="">Elegir…</option>' + ps.map(function (p) { return '<option' + (f.valores['Parroquia'] === p ? ' selected' : '') + '>' + p + '</option>'; }).join('');
-        $('#msgParr').textContent = parroquia ? 'Detectada con el GPS. Corríjala si no es correcta.' : 'Cantón detectado por la isla. Elija la parroquia.';
-      }
+    // Punto en la costa, en un río ancho o en un hueco de la capa: se toma la parroquia más cercana a menos de 2 km
+    var cerca = null;
+    if (!cod && S.parroquias) {
+      var mejor = Infinity;
+      S.parroquias.features.forEach(function (ft) {
+        if (ft.properties.p === 'ISLA') return;
+        var g = ft.geometry, polis = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+        polis.forEach(function (p) {
+          var r = p[0];
+          for (var i = 1; i < r.length; i++) {
+            var d = distanciaASegmento(lat, lon, r[i - 1], r[i]);
+            if (d < mejor) { mejor = d; cerca = ft.properties.p; }
+          }
+        });
+      });
+      if (mejor <= 2000) cod = cerca; else cerca = null;
+      if (cerca) cerca = Math.round(mejor);
+    }
+    if (cod) {
+      fijarParroquia(cod); S.selProv = cod.slice(0, 2); S.selCant = cod.slice(0, 4);
+      pintarSelectsDPA();
+      if ($('#msgParr')) $('#msgParr').textContent = cerca != null ? 'El punto está fuera de los límites parroquiales: se tomó la parroquia más cercana (a ' + cerca + ' m). Verifíquela.' : 'Detectada con el GPS. Corríjala si no es correcta, sobre todo cerca de un límite.';
+    } else if ($('#msgParr')) {
+      $('#msgParr').textContent = S.parroquias ? 'No se pudo detectar la parroquia en este punto. Elíjala en la lista.' : 'Elija la parroquia en la lista.';
     }
   }
   function revisarCercanos() {
@@ -906,15 +973,16 @@
   }
 
   // ---------------- Paso 2: Evento ----------------
+  function esMM() { return S.ficha && S.ficha.valores['Tipo de Evento'] === 'Movimiento en masa'; }
   function pasoEvento(cuerpo) {
     var f = S.ficha;
-    var h = campoOpciones('Origen', CATALOGOS['Origen'], 'Origen observado') +
+    var h = (esMM() ? '' : campoOpciones('Origen', CATALOGOS['Origen'], 'Origen observado') +
       campoOpciones('Nivel del Agua', CATALOGOS['Nivel del Agua'], 'Nivel del agua', { una: true }) +
-      campoOpciones('Tendencia del Agua', CATALOGOS['Tendencia del Agua'], 'Tendencia del agua') +
+      campoOpciones('Tendencia del Agua', CATALOGOS['Tendencia del Agua'], 'Tendencia del agua')) +
       campoOpciones('Estado del Evento', CATALOGOS['Estado del Evento'], 'Estado del evento', { oblig: true, info: 'estado' });
     if (f.tipo !== 'CORRECCION') {
       h += '<div class="tarjeta"><div class="etq" style="display:flex;gap:8px;align-items:center;font-weight:650">¿Solicitar el cierre del evento? ' + botonInfo('cierre') + '</div>' +
-        '<p class="muted">Solo si ya no hay afectación vigente. El coordinador lo confirma.</p>' +
+        '<p class="muted">Solo si ya no hay afectación vigente. El administrador lo confirma.</p>' +
         campoOpciones('Solicitud de Cierre', CATALOGOS['Solicitud de Cierre'], 'Motivo', { una: true }) + '</div>';
     }
     h += '<div class="campo"><label for="t-desc">Descripción del evento</label><textarea id="t-desc" data-texto="Descripción" placeholder="Qué se observa en el sitio. Puede dictar con el micrófono del teclado.">' + esc(f.valores['Descripción']) + '</textarea></div>';
@@ -1014,26 +1082,30 @@
   }
 
   // ---------------- Paso 6: Mapa ----------------
+  function cajaGeom(g) {
+    var b = [180, 90, -180, -90], polis = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+    polis.forEach(function (p) { p[0].forEach(function (c) { b[0] = Math.min(b[0], c[0]); b[1] = Math.min(b[1], c[1]); b[2] = Math.max(b[2], c[0]); b[3] = Math.max(b[3], c[1]); }); });
+    return b;
+  }
   function crearMapa(div, centro, zoom) {
-    var mapa = L.map(div, { zoomControl: true, attributionControl: true, zoomAnimation: false, fadeAnimation: false, markerZoomAnimation: false });
-    var base = L.tileLayer(CONFIG.TESELAS_BASE, { subdomains: CONFIG.TESELAS_BASE_SUB.length ? CONFIG.TESELAS_BASE_SUB : 'abc', maxZoom: 19, maxNativeZoom: 18, attribution: CONFIG.TESELAS_BASE_ATRIB, crossOrigin: true }).addTo(mapa);
+    var mapa = L.map(div, { zoomControl: true, attributionControl: true, zoomAnimation: false, fadeAnimation: false, markerZoomAnimation: false, maxZoom: 19 });
+    // Mapa base propio (funciona sin señal en las áreas descargadas); la imagen satelital solo con señal
+    var base = MapaBase.capa().addTo(mapa);
     var sat = L.tileLayer(CONFIG.TESELAS_SATELITE, { maxZoom: 19, maxNativeZoom: 18, attribution: CONFIG.TESELAS_SATELITE_ATRIB });
-    // Respaldo: si el mapa base falla con señal, se cambia a OpenStreetMap (solo visualización, sin descarga masiva)
-    var errores = 0, respaldo = false;
-    base.on('tileerror', function () {
-      if (respaldo || !navigator.onLine || ++errores < 4) return;
-      respaldo = true;
-      mapa.removeLayer(base);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapa).bringToBack();
-    });
-    base.on('tileload', function () { errores = 0; });
     var capas = { 'Mapa base': base, 'Satélite (requiere señal)': sat };
     var extra = {};
     if (S.parroquias) {
-      extra['Límites parroquiales'] = L.geoJSON(S.parroquias, { style: { color: '#334155', weight: 2, dashArray: '6 4', fill: false }, interactive: false }).addTo(mapa);
+      // Solo las parroquias cercanas, dibujadas en canvas: la capa nacional completa sería pesada en un teléfono
+      var c0 = centro || [-1.6, -78.6], radio = centro ? 0.35 : 0;
+      var cerca = S.parroquias.features.filter(function (ft) {
+        if (!radio) return false;
+        var b = ft._caja || (ft._caja = cajaGeom(ft.geometry));
+        return b[0] - radio <= c0[1] && b[2] + radio >= c0[1] && b[1] - radio <= c0[0] && b[3] + radio >= c0[0];
+      });
+      extra['Límites parroquiales'] = L.geoJSON({ type: 'FeatureCollection', features: cerca }, { renderer: L.canvas(), style: { color: '#64748b', weight: 1.5, dashArray: '2 5', fill: false }, interactive: false }).addTo(mapa);
     }
     L.control.layers(capas, extra, { collapsed: true }).addTo(mapa);
-    mapa.setView(centro || [-0.745, -90.313], zoom || 15);
+    if (centro) mapa.setView(centro, zoom || 15); else mapa.setView([-1.6, -78.6], 7);
     return mapa;
   }
   function agregarLeyenda(mapa, conTipos) {
@@ -1063,6 +1135,9 @@
   };
   var MAX_GEOMETRIAS = 60;
   function grupoGeo(t) { return t === 'Área inundada' ? 'Zona afectada' : t; }
+  // En movimiento en masa solo se dibuja el área afectada
+  function tiposPermitidos() { return esMM() ? ['Zona afectada'] : Object.keys(TIPOS_GEO); }
+  function nombreGeo(t) { return esMM() && grupoGeo(t) === 'Zona afectada' ? 'Área afectada' : grupoGeo(t); }
   function formaGeo(t) { return (TIPOS_GEO[grupoGeo(t)] || {}).forma; }
   function firmasGeo(lista) {
     var o = {};
@@ -1097,13 +1172,18 @@
     return L.marker(ll[0], { icon: L.divIcon({ className: '', html: '<div class="rombo" style="background:' + color + '"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: !opc.fino });
   }
 
+  function textoZonas() {
+    $('#tituloZonas').innerHTML = (esMM() ? 'Área afectada' : 'Zonas afectadas') + ' <span class="muted" style="font-weight:500">(opcional)</span>';
+    $('#subZonas').textContent = esMM() ? 'Dibuje el área afectada por el movimiento en masa.' : 'Dibuje las zonas afectadas, los tramos de vía, los cauces desbordados y los puntos críticos. Puede dibujar varios de cada uno.';
+  }
   function pasoUbicacionZonas(cuerpo) {
     cuerpo.innerHTML = '<div id="ubic"></div>' +
-      '<h3 class="sec-zonas">Zonas afectadas <span class="muted" style="font-weight:500">(opcional)</span></h3>' +
-      '<p class="paso-sub">Dibuje las zonas afectadas, los tramos de vía, los cauces desbordados y los puntos críticos. Puede dibujar varios de cada uno.</p>' +
+      '<h3 class="sec-zonas" id="tituloZonas"></h3>' +
+      '<p class="paso-sub" id="subZonas"></p>' +
       '<div id="avisoZona"></div><div id="herr"></div><div class="mapa" id="mapaFicha"></div><div id="geoms"></div>';
     pasoUbicacion($('#ubic'));
     editorZonas();
+    textoZonas();
   }
 
   function editorZonas() {
@@ -1135,9 +1215,9 @@
         capaGeo(g, color).on('click', function () { if (!modo) editarGeo(i); }).addTo(capaFicha);
       });
       var hayZona = f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; });
-      $('#avisoZona').innerHTML = !hayZona && f.tipo === 'INICIAL' ? '<div class="aviso alerta">Aún no hay zonas afectadas dibujadas. Si puede, dibuje al menos una.</div>' : '';
+      $('#avisoZona').innerHTML = !hayZona && f.tipo === 'INICIAL' ? '<div class="aviso alerta">' + (esMM() ? 'Aún no se ha dibujado el área afectada.' : 'Aún no hay zonas afectadas dibujadas. Si puede, dibuje al menos una.') + '</div>' : '';
       $('#geoms').innerHTML = f.geometrias.map(function (g, i) {
-        var t = grupoGeo(g.tipo) + (g.detalle ? ': ' + g.detalle : '');
+        var t = nombreGeo(g.tipo) + (g.detalle ? ': ' + g.detalle : '');
         return '<div class="tarjeta geo-item" data-ver="' + i + '"><div style="flex:1"><b>' + esc(t) + '</b><br><span class="muted">' + medidaGeo(g) + '</span>' +
           (g.nota ? '<br><span>' + esc(g.nota) + '</span>' : '') + '</div>' +
           '<button class="btn chico" data-editar="' + i + '">Nota</button><button class="btn chico peligro" data-quitar="' + i + '">Quitar</button></div>';
@@ -1193,14 +1273,14 @@
       if (!modo) {
         var lleno = f.geometrias.length >= MAX_GEOMETRIAS;
         h = lleno ? '<div class="aviso alerta">Llegó al máximo de ' + MAX_GEOMETRIAS + ' elementos en esta ficha.</div>' :
-          '<div class="herr">' + Object.keys(TIPOS_GEO).map(function (t) { return '<button class="btn" data-dibujar="' + esc(t) + '">+ ' + esc(t) + '</button>'; }).join('') +
-          '<button class="btn" id="hCaminar" style="grid-column:1/-1">Trazar una zona caminando el borde</button></div>';
+          '<div class="herr">' + tiposPermitidos().map(function (t) { return '<button class="btn" data-dibujar="' + esc(t) + '"' + (esMM() ? ' style="grid-column:1/-1"' : '') + '>+ ' + esc(nombreGeo(t)) + '</button>'; }).join('') +
+          '<button class="btn" id="hCaminar" style="grid-column:1/-1">Trazar ' + (esMM() ? 'el área' : 'una zona') + ' caminando el borde</button></div>';
       } else if (modo === 'caminar') {
         h = '<div class="aviso info">Camine por el borde de la zona. Puntos tomados: <b id="nPts">' + verts.length + '</b>. Se descartan los de precisión peor que ' + CONFIG.PRECISION_ACEPTABLE_M + ' m.</div>' +
           '<div class="herr"><button class="btn" id="hCancelar">Cancelar</button><button class="btn primario" id="hTerminar"' + (verts.length >= 3 ? '' : ' disabled') + '>Terminar</button></div>';
       } else {
         var min = TIPOS_GEO[modo].min;
-        h = '<div class="aviso info"><b>' + esc(modo) + ':</b> ' + TIPOS_GEO[modo].ayuda + (min > 1 ? ' Puntos: <b>' + verts.length + '</b>' : '') + '</div>' +
+        h = '<div class="aviso info"><b>' + esc(nombreGeo(modo)) + ':</b> ' + (esMM() && modo === 'Zona afectada' ? 'Toque el mapa en cada esquina del área afectada por el movimiento en masa.' : TIPOS_GEO[modo].ayuda) + (min > 1 ? ' Puntos: <b>' + verts.length + '</b>' : '') + '</div>' +
           '<div class="herr' + (min > 1 ? ' tres' : '') + '">' + (min > 1 ? '<button class="btn" id="hDeshacer"' + (verts.length ? '' : ' disabled') + '>Deshacer</button>' : '') + '<button class="btn" id="hCancelar"' + (min > 1 ? '' : ' style="grid-column:1/-1"') + '>Cancelar</button>' +
           (min > 1 ? '<button class="btn primario" id="hTerminar"' + (verts.length >= min ? '' : ' disabled') + '>Terminar</button>' : '') + '</div>';
       }
@@ -1250,6 +1330,7 @@
       var uu = f.ubicacion;
       if (uu && uu.lat != null && !f.geometrias.length) mapa.setView([uu.lat, uu.lon], 17);
     };
+    S.alTipo = function () { textoZonas(); pintarFicha(); herramientas(); };
     pintarOtros(); pintarFicha(); herramientas();
     var g = capaFicha.getLayers().length > 1 ? L.featureGroup(capaFicha.getLayers()) : null;
     if (g) mapa.fitBounds(g.getBounds().pad(0.4), { maxZoom: 18 });
@@ -1289,8 +1370,8 @@
     var f = S.ficha, v = f.valores, b = [];
     if (!f.ubicacion || f.ubicacion.lat == null) b.push([1, 'Falta la ubicación']);
     if (f.tipo === 'INICIAL' && f.ubicacion && !f.ubicacion.aceptada) b.push([1, 'Falta confirmar la ubicación']);
-    if (!v['Cantón']) b.push([1, 'Falta el cantón']);
-    if (!v['Parroquia']) b.push([1, 'Falta la parroquia']);
+    if (f.tipo === 'INICIAL' && !v['Tipo de Evento']) b.push([1, 'Falta el tipo de evento']);
+    if (!v['Código Parroquia'] && !(f.tipo !== 'INICIAL' && v['Parroquia'])) b.push([1, 'Falta la provincia, el cantón o la parroquia']);
     if (!v['Estado del Evento']) b.push([2, 'Falta el estado del evento']);
     if (f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'punto' && !g.detalle; })) b.push([1, 'Falta indicar qué hay en un punto crítico (toque "Nota")']);
     CIFRAS_OBLIGATORIAS.forEach(function (c) {
@@ -1305,13 +1386,14 @@
     var bl = bloqueos();
     $('#bloqueos').innerHTML = bl.map(function (x) { return '<div class="aviso error" data-paso="' + x[0] + '" style="cursor:pointer">' + esc(x[1]) + ' ›</div>'; }).join('') +
       advertencias().map(function (a) { return '<div class="aviso alerta" data-paso="3" style="cursor:pointer">' + esc(a) + '</div>'; }).join('') +
-      (f.tipo === 'INICIAL' && !f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; }) ? '<div class="aviso alerta" data-paso="1" style="cursor:pointer">No se dibujó ninguna zona afectada. Puede enviar igual o volver al mapa ›</div>' : '');
+      (f.tipo === 'INICIAL' && !f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; }) ? '<div class="aviso alerta" data-paso="1" style="cursor:pointer">' + (esMM() ? 'No se dibujó el área afectada' : 'No se dibujó ninguna zona afectada') + '. Puede enviar igual o volver al mapa ›</div>' : '');
     function fila(et, val, paso) { return '<tr class="ir" data-paso="' + paso + '"><td>' + esc(et) + '</td><td><b>' + (val === '' || val == null ? '<span class="muted">Sin dato</span>' : esc(val)) + '</b></td></tr>'; }
     var pi = suma(v['Personas Afectadas Directamente'], v['Personas Damnificadas']);
     var fi = suma(v['Familias Afectadas'], v['Familias Damnificadas']);
     DB.porIndice('fotos', 'id_visita', f.id_visita).then(function (fotos) {
       $('#resumen').innerHTML =
-        fila('Sitio', (v['Sector'] || '') + (v['Parroquia'] ? ' · ' + v['Parroquia'] : ''), 1) +
+        fila('Tipo de evento', v['Tipo de Evento'] || 'Inundación', 1) +
+        fila('Sitio', (v['Sector'] || '') + (v['Parroquia'] ? ' · ' + v['Parroquia'] + ', ' + v['Cantón'] + (v['Provincia'] ? ', ' + v['Provincia'] : '') : ''), 1) +
         fila('Estado', v['Estado del Evento'] + (v['Solicitud de Cierre'] ? ' (solicita cierre)' : ''), 2) +
         fila('Familias afectadas / damnificadas', fmt(v['Familias Afectadas']) + ' / ' + fmt(v['Familias Damnificadas']), 3) +
         fila('Personas afectadas / damnificadas', fmt(v['Personas Afectadas Directamente']) + ' / ' + fmt(v['Personas Damnificadas']), 3) +
@@ -1592,66 +1674,114 @@
   }
 
   // ----------------------------------------------------------------
-  // Mapa sin conexión: descarga de teselas de las zonas pobladas
+  // Mapa sin conexión: descarga del mapa base propio por cantón o por provincia
   // ----------------------------------------------------------------
-  function teselasDe(caja, z) {
-    function x(lon) { return Math.floor((lon + 180) / 360 * Math.pow(2, z)); }
-    function y(lat) { var r = lat * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z)); }
-    var out = [];
-    for (var i = x(caja[0]); i <= x(caja[2]); i++) for (var j = y(caja[3]); j <= y(caja[1]); j++) out.push([z, i, j]);
-    return out;
-  }
-  function urlsTeselas() {
-    var t = [], vistos = {};
-    function add(l) { l.forEach(function (k) { var id = k.join('/'); if (!vistos[id]) { vistos[id] = 1; t.push(k); } }); }
-    ISLAS_MAPA.forEach(function (c) { for (var z = 9; z <= 13; z++) add(teselasDe(c, z)); });
-    ZONAS_MAPA.forEach(function (zn) { for (var z = 14; z <= 17; z++) add(teselasDe(zn.caja, z)); });
-    var sub = CONFIG.TESELAS_BASE_SUB;
-    return t.map(function (k) {
-      var s = sub.length ? sub[Math.abs(k[1] + k[2]) % sub.length] : ''; // misma regla de Leaflet para elegir subdominio
-      return CONFIG.TESELAS_BASE.replace('{s}', s).replace('{z}', k[0]).replace('{x}', k[1]).replace('{y}', k[2]);
-    });
+  function geomsDe(tipo, cod) {
+    return (S.parroquias ? S.parroquias.features : []).filter(function (ft) { return tipo === 'C' ? ft.properties.c === cod : ft.properties.v === cod; })
+      .map(function (ft) { return ft.geometry; });
   }
   function vistaMapaOffline() {
     limpiarVista(); marcar('mapaoff'); titulo('Mapa sin conexión', vistaInicio);
-    var urls = urlsTeselas();
-    DB.kvGet('mapaOffline').then(function (info) {
-      $('#vista').innerHTML = '<div class="tarjeta"><h2>Preparar el mapa</h2><p>Descarga el mapa base de las zonas pobladas de Santa Cruz, San Cristóbal, Isabela y Floreana, para dibujar afectaciones sin señal.</p>' +
-        '<p class="muted">' + urls.length.toLocaleString('es') + ' teselas, unos ' + Math.round(urls.length * 18 / 1024) + ' MB. Hágalo con wifi. La imagen satelital solo carga con señal.</p>' +
-        (info ? '<div class="aviso ok">Última preparación: ' + fechaLegible(new Date(info.fecha).toISOString()) + ' (' + info.ok + ' teselas)</div>' : '') +
-        '<div class="barra-progreso"><div id="bp"></div></div><p id="bpTxt" class="muted"></p>' +
-        '<button class="btn primario" id="desc">Descargar mapa</button></div>' +
-        '<div class="tarjeta"><h2>Zonas incluidas</h2><p class="muted">' + ZONAS_MAPA.map(function (z) { return esc(z.nombre); }).join(', ') + '. Fuera de ellas el mapa se ve con menos detalle, salvo donde ya lo haya visto con señal.</p></div>';
-      $('#desc').onclick = function () {
-        if (!navigator.onLine) return toast('Se necesita señal');
-        $('#desc').disabled = true;
-        var hechas = 0, fallidas = 0, i = 0, total = urls.length;
-        caches.open('campo-teselas-v2').then(function (c) {
-          function sig() {
-            if (i >= total) return Promise.resolve();
-            var u = urls[i++];
-            return c.match(u).then(function (hit) {
-              if (hit) return;
-              return fetch(u, { mode: 'cors' }).then(function (r) { if (r.ok) return c.put(u, r); fallidas++; }).catch(function () { fallidas++; });
-            }).then(function () {
-              hechas++;
-              if (hechas % 10 === 0 || hechas === total) { $('#bp').style.width = (100 * hechas / total) + '%'; $('#bpTxt').textContent = hechas + ' de ' + total + (fallidas ? ' · ' + fallidas + ' fallidas' : ''); }
-              return sig();
-            });
-          }
-          return Promise.all([sig(), sig(), sig(), sig(), sig(), sig()]);
-        }).then(function () {
-          DB.kvSet('mapaOffline', { fecha: Date.now(), ok: total - fallidas });
-          $('#desc').disabled = false;
-          toast(fallidas ? 'Mapa descargado con ' + fallidas + ' teselas fallidas. Puede repetir.' : 'Mapa listo para usar sin señal');
+    var cancelar = false, enCurso = false;
+    var codIni = (S.ficha && S.ficha.valores['Código Parroquia']) || '';
+    S.offProv = S.offProv || codIni.slice(0, 2); S.offCant = S.offCant || codIni.slice(0, 4);
+    $('#vista').innerHTML = '<div class="tarjeta"><h2>Descargar el mapa</h2>' +
+      '<p>Guarda en el teléfono el mapa base de un cantón o de una provincia para ubicarse y dibujar sin señal. Hágalo con wifi.</p>' +
+      '<div class="campo"><div class="etq">Provincia</div><select id="oProv"></select></div>' +
+      '<div class="campo"><div class="etq">Cantón</div><select id="oCant"></select></div>' +
+      '<div id="oPlan" class="muted"></div>' +
+      '<div class="fila-btn"><button class="btn primario" id="oCanton" disabled>Descargar el cantón</button><button class="btn" id="oProvBtn" disabled>Descargar la provincia</button></div>' +
+      '<div id="oProg" hidden><div class="barra-progreso"><div id="bp"></div></div><p id="bpTxt" class="muted"></p><button class="btn chico" id="oCancel">Detener</button></div></div>' +
+      '<div class="tarjeta"><h2>Mapas guardados en este teléfono</h2><div id="oLista"></div><p class="muted">La imagen satelital solo carga con señal. Fuera de lo descargado, el mapa se ve solo con señal.</p></div>';
+    if (!S.parroquias) { $('#oPlan').innerHTML = '<div class="aviso alerta">Aún no se cargan los límites territoriales. Abra esta pantalla con señal.</div>'; }
+    function pintarSel() {
+      $('#oProv').innerHTML = opcionesDPA(DPA, S.offProv, 'Elegir…');
+      $('#oCant').innerHTML = S.offProv ? opcionesDPA(DPA[S.offProv].c, S.offCant, 'Elegir…') : '<option value="">Primero elija la provincia</option>';
+      planes();
+    }
+    var planC = null, planP = null;
+    function planes() {
+      planC = planP = null; $('#oCanton').disabled = $('#oProvBtn').disabled = true; $('#oPlan').textContent = '';
+      if (!S.parroquias || !S.offProv) return;
+      var pv = S.offProv, ca = S.offCant;
+      var promesas = [MapaBase.planificar({ id: 'P:' + pv, prov: pv, tipo: 'Provincia', nombre: 'Provincia ' + DPA[pv].n, geoms: geomsDe('P', pv) })];
+      if (ca) promesas.push(MapaBase.planificar({ id: 'C:' + ca, prov: pv, tipo: 'Cantón', nombre: 'Cantón ' + DPA[pv].c[ca].n + ' (' + DPA[pv].n + ')', geoms: geomsDe('C', ca) }));
+      Promise.all(promesas).then(function (r) {
+        planP = r[0]; planC = r[1] || null;
+        $('#oPlan').innerHTML = (planC ? '<p>Cantón: unas ' + planC.teselas.length.toLocaleString('es') + ' piezas, aprox. <b>' + planC.mb + ' MB</b>.</p>' : '') +
+          '<p>Provincia completa: unas ' + planP.teselas.length.toLocaleString('es') + ' piezas, aprox. <b>' + planP.mb + ' MB</b>.</p>';
+        $('#oCanton').disabled = !planC || enCurso; $('#oProvBtn').disabled = enCurso;
+      }).catch(function () { $('#oPlan').innerHTML = '<div class="aviso alerta">No se pudo leer el índice del mapa. Intente con señal.</div>'; });
+    }
+    function lista() {
+      MapaBase.descargados().then(function (l) {
+        var ver = null; MapaBase.indice().then(function (i) { ver = i.version; }).catch(function () {}).then(function () {
+          $('#oLista').innerHTML = l.length ? l.map(function (a) {
+            return '<div class="tarjeta" style="display:flex;gap:8px;align-items:center;padding:10px"><div style="flex:1"><b>' + esc(a.nombre) + '</b><br><span class="muted">' + fechaLegible(new Date(a.fecha).toISOString()) + ' · ' + a.mb + ' MB' +
+              (a.fallidas ? ' · ' + a.fallidas + ' piezas pendientes: repita la descarga' : '') + '</span>' +
+              (ver && a.version !== ver ? '<br><span class="chip amb">Hay un mapa más reciente: vuelva a descargarlo</span>' : '') + '</div>' +
+              '<button class="btn chico peligro" data-borrar="' + esc(a.id) + '">Quitar</button></div>';
+          }).join('') : '<p class="muted">Ninguno todavía.</p>';
+          $$('[data-borrar]').forEach(function (b) {
+            b.onclick = function () {
+              confirmar('¿Quitar este mapa del teléfono?', 'Quitar').then(function (ok) { if (ok) MapaBase.borrar(b.getAttribute('data-borrar')).then(lista); });
+            };
+          });
+        });
+      });
+    }
+    function bajar(plan) {
+      if (!navigator.onLine) return toast('Se necesita señal');
+      var hacer = function () {
+        enCurso = true; cancelar = false;
+        $('#oCanton').disabled = $('#oProvBtn').disabled = true; $('#oProg').hidden = false;
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+        MapaBase.descargar(plan, function (h, t, fall) {
+          if (!$('#bp')) return;
+          $('#bp').style.width = (100 * h / t) + '%';
+          $('#bpTxt').textContent = h.toLocaleString('es') + ' de ' + t.toLocaleString('es') + (fall ? ' · ' + fall + ' fallidas' : '');
+        }, function () { return cancelar; }).then(function (r) {
+          enCurso = false;
+          if (!$('#oProg')) return;
+          $('#oProg').hidden = true; planes(); lista();
+          toast(r.cancelado ? 'Descarga detenida. Puede retomarla: lo ya bajado se conserva.' : r.fallidas ? 'Mapa guardado con ' + r.fallidas + ' piezas fallidas. Repita para completarlo.' : 'Mapa guardado: ' + plan.area.nombre);
         });
       };
-    });
+      // Aviso si el teléfono tiene poco espacio
+      if (navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(function (e) {
+          var libreMB = (e.quota - e.usage) / 1048576;
+          if (libreMB < plan.mb * 1.5) confirmar('El teléfono tiene poco espacio disponible para la app (unos ' + Math.round(libreMB) + ' MB). ¿Intentar igual?', 'Intentar').then(function (ok) { if (ok) hacer(); });
+          else hacer();
+        }).catch(hacer);
+      } else hacer();
+    }
+    $('#oProv').onchange = function () { S.offProv = this.value; S.offCant = ''; pintarSel(); };
+    $('#oCant').onchange = function () { S.offCant = this.value; planes(); };
+    $('#oCanton').onclick = function () { if (planC) bajar(planC); };
+    $('#oProvBtn').onclick = function () {
+      if (!planP) return;
+      confirmar('La provincia completa pesa unos ' + planP.mb + ' MB y puede tardar varios minutos. ¿Descargar?', 'Descargar').then(function (ok) { if (ok) bajar(planP); });
+    };
+    $('#oCancel').onclick = function () { cancelar = true; };
+    S.detenerExtra = function () { cancelar = true; };
+    pintarSel(); lista();
   }
 
   // ----------------------------------------------------------------
   // Arranque
   // ----------------------------------------------------------------
+  // Errores inesperados de la app: se informan al servidor (como máximo 5 por sesión) para el registro de errores
+  var erroresInformados = 0;
+  function informarError(donde, msg) {
+    if (erroresInformados >= 5 || !CONFIG.BACKEND_URL) return;
+    erroresInformados++;
+    var cuerpo = { accion: 'reportarError', donde: donde, mensaje: String(msg).slice(0, 1500), version: CONFIG.VERSION, correo: S.sesion ? S.sesion.correo : '' };
+    if (navigator.onLine) Sync.post(cuerpo, 15000).catch(function () {});
+  }
+  window.addEventListener('error', function (e) { informarError('pagina', (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || '')); });
+  window.addEventListener('unhandledrejection', function (e) { var r = e.reason; informarError('promesa', r && (r.stack || r.message) || r); });
+
   function arrancar() {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
     window.addEventListener('online', function () { actualizarConexion(); if (S.sesion) reintentarLuego(1, 15); });

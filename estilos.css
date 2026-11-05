@@ -38,7 +38,7 @@ button { cursor: pointer; }
   display: flex; align-items: center; gap: 10px;
   padding: calc(env(safe-area-inset-top) + 10px) 16px 10px; background: var(--azul); color: #fff;
 }
-.cabecera { position: sticky; top: 0; z-index: 900; }
+.cabecera { position: sticky; top: 0; z-index: 1100; } /* sobre los controles de Leaflet (1000) */
 .marca { background: #fff; border-bottom: 3px solid var(--oro); padding: 10px 16px; text-align: center; }
 .marca img { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; }
 .marca.compacta { padding: 5px 16px; }
@@ -92,7 +92,7 @@ main { padding: 16px 16px calc(env(safe-area-inset-bottom) + 110px); max-width: 
 .paso-sub { margin: 0 0 14px; color: var(--tinta-2); font-size: 15px; }
 
 .navpasos {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 800; display: flex; gap: 10px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 1100; display: flex; gap: 10px;
   padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px); background: var(--papel); border-top: 1px solid var(--linea);
 }
 .navpasos .btn { margin: 0; }

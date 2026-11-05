@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Afectaciones GAL">
-  <title>Afectaciones Galápagos</title>
+  <meta name="apple-mobile-web-app-title" content="Afectaciones SNGR">
+  <title>Registro de afectaciones, SNGR</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icono-192.png">
   <link rel="icon" href="icons/icono-192.png">
@@ -19,7 +19,7 @@
   <div class="cabecera">
   <header class="barra">
     <button class="volver" id="btnVolver" hidden aria-label="Volver">‹</button>
-    <h1 id="titulo">Afectaciones Galápagos</h1>
+    <h1 id="titulo">Registro de afectaciones</h1>
     <span class="pildora" id="conexion">…</span>
   </header>
   <div class="marca compacta" id="marca"><img src="img/logo-sngr.png" alt="Gobierno del Ecuador, Secretaría Nacional de Gestión de Riesgos" width="900" height="152"></div>
@@ -30,10 +30,14 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/protomaps/pmtiles.js"></script>
+  <script src="vendor/protomaps/protomaps-leaflet.js"></script>
+  <script src="datos/dpa.js"></script>
   <script src="config.js"></script>
   <script src="catalogos.js"></script>
   <script src="db.js"></script>
   <script src="sync.js"></script>
+  <script src="mapa.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

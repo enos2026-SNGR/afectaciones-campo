@@ -1,7 +1,7 @@
 {
-  "name": "Registro de afectaciones, Galápagos",
-  "short_name": "Afectaciones GAL",
-  "description": "Levantamiento de afectaciones por inundaciones en territorio, con y sin conexión",
+  "name": "Registro de afectaciones, SNGR",
+  "short_name": "Afectaciones SNGR",
+  "description": "Registro de afectaciones en territorio (inundaciones y movimientos en masa), con y sin conexión",
   "lang": "es",
   "start_url": "./index.html",
   "scope": "./",

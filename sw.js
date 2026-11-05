@@ -1,13 +1,14 @@
 /* Service worker: abre la app sin conexión, guarda teselas del mapa y sincroniza en segundo plano (Android) */
 importScripts('config.js', 'db.js', 'sync.js');
 
-var APP = 'campo-app-v10';
+var APP = 'campo-app-v11';
 var TESELAS = 'campo-teselas-v2';
 var ARCHIVOS = [
   './', 'index.html', 'app.js', 'estilos.css', 'config.js', 'catalogos.js', 'db.js', 'sync.js',
   'manifest.webmanifest', 'icons/icono-192.png', 'icons/icono-512.png', 'img/logo-sngr.png',
-  'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
-  'datos/parroquias.geojson'
+  'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png', 'mapa.js',
+  'vendor/protomaps/pmtiles.js', 'vendor/protomaps/protomaps-leaflet.js',
+  'datos/dpa.js', 'datos/parroquias.geojson'
 ];
 
 self.addEventListener('install', function (e) {
@@ -45,6 +46,8 @@ self.addEventListener('fetch', function (e) {
     }));
     return;
   }
+  // El mapa base se lee por rangos y se guarda en IndexedDB desde la app: el service worker no lo intercepta
+  if (/\/mapa-base-sngr\//.test(url)) return;
   if (new URL(url).origin === self.location.origin) {
     // Archivos de la app: red primero para recibir actualizaciones, copia guardada sin conexión
     e.respondWith(fetch(req).then(function (r) {

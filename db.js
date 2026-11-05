@@ -1,6 +1,6 @@
 /* Almacenamiento local en IndexedDB. Se usa desde la página y desde el service worker. */
 var DB = (function () {
-  var NOMBRE = 'afectaciones-galapagos', VERSION = 1, _db = null;
+  var NOMBRE = 'afectaciones-galapagos', VERSION = 2, _db = null; // el nombre se conserva para no perder datos guardados
 
   function abrir() {
     if (_db) return Promise.resolve(_db);
@@ -12,6 +12,11 @@ var DB = (function () {
         if (!db.objectStoreNames.contains('fichas')) {
           var f = db.createObjectStore('fichas', { keyPath: 'id_visita' });
           f.createIndex('estado', 'estado');
+        }
+        // Mapa base sin conexión: cada tesela guarda las áreas descargadas que la usan
+        if (!db.objectStoreNames.contains('teselas')) {
+          var t = db.createObjectStore('teselas', { keyPath: 'k' });
+          t.createIndex('areas', 'areas', { multiEntry: true });
         }
         if (!db.objectStoreNames.contains('fotos')) {
           var p = db.createObjectStore('fotos', { keyPath: 'id_foto' });
@@ -45,6 +50,7 @@ var DB = (function () {
       return tx(store, 'readonly', function (s) { return s.index(indice).getAll(valor); });
     },
     kvGet: function (k) { return tx('kv', 'readonly', function (s) { return s.get(k); }); },
-    kvSet: function (k, v) { return tx('kv', 'readwrite', function (s) { return s.put(v, k); }); }
+    kvSet: function (k, v) { return tx('kv', 'readwrite', function (s) { return s.put(v, k); }); },
+    tx: tx
   };
 })();
