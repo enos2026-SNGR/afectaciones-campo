@@ -214,9 +214,58 @@
       return Sync.sincronizar();
     }).then(cargarDatos).then(vistaInicio);
   }
-  function tratarAcceso(r, correo) {
+  // ----------------------------------------------------------------
+  // Ingreso sin señal: tras cada ingreso en línea se guarda en el teléfono una huella de la clave
+  // (PBKDF2, nunca la clave). Sin señal, la misma cuenta puede volver a entrar en ese teléfono.
+  // ----------------------------------------------------------------
+  var MAX_INTENTOS_LOCAL = 5, MIN_BLOQUEO_LOCAL = 15;
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  function huella(secreto, sal) {
+    var enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode(secreto), 'PBKDF2', false, ['deriveBits']).then(function (k) {
+      return crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(sal), iterations: 150000 }, k, 256);
+    }).then(hex);
+  }
+  function claveLocal(cuenta) { return 'accesoLocal:' + String(cuenta || '').trim().toLowerCase(); }
+  function recordarAcceso(cuenta, secreto, sesion) {
+    if (!secreto || !window.crypto || !crypto.subtle) return Promise.resolve();
+    var sal = hex(crypto.getRandomValues(new Uint8Array(16)));
+    return huella(secreto, sal).then(function (h) {
+      return DB.kvSet(claveLocal(cuenta), { sal: sal, huella: h, sesion: sesion, fecha: Date.now(), intentos: 0, bloqueo: 0 });
+    }).catch(function () {});
+  }
+  function entrarSinSenal(cuenta, secreto, boton) {
+    var k = claveLocal(cuenta);
+    return DB.kvGet(k).then(function (reg) {
+      if (!reg || !window.crypto || !crypto.subtle) {
+        throw new Error('Sin señal. Esta cuenta aún no ha ingresado en este teléfono: el primer ingreso necesita conexión. Después podrá entrar sin señal.');
+      }
+      if (reg.bloqueo && reg.bloqueo > Date.now()) {
+        throw new Error('Demasiados intentos sin señal. Espere ' + Math.ceil((reg.bloqueo - Date.now()) / 60000) + ' minuto(s).');
+      }
+      return huella(secreto, reg.sal).then(function (h) {
+        if (h !== reg.huella) {
+          reg.intentos = (reg.intentos || 0) + 1;
+          if (reg.intentos >= MAX_INTENTOS_LOCAL) { reg.intentos = 0; reg.bloqueo = Date.now() + MIN_BLOQUEO_LOCAL * 60000; }
+          return DB.kvSet(k, reg).then(function () {
+            throw new Error('Sin señal. La clave no coincide con la del último ingreso en este teléfono.');
+          });
+        }
+        reg.intentos = 0; reg.bloqueo = 0;
+        return DB.kvSet(k, reg).then(function () {
+          toast('Ingreso sin señal. Las fichas se enviarán cuando haya conexión.');
+          return entrarCon(reg.sesion);
+        });
+      });
+    }).catch(function (e) { if (boton) ocupado(boton, false); msgAcc(esc(e.message), 'alerta'); });
+  }
+
+  function tratarAcceso(r, correo, secreto) {
     if (!r.ok) throw new Error(r.error);
-    if (r.estado === 'HABILITADO') return entrarCon({ tipo: 'usuario', codigo: r.correo, correo: r.correo, nombre: r.nombre, token: r.token });
+    if (r.estado === 'HABILITADO') {
+      var ses = { tipo: 'usuario', codigo: r.correo, correo: r.correo, nombre: r.nombre, token: r.token };
+      return recordarAcceso(r.correo, secreto, ses).then(function () { return entrarCon(ses); });
+    }
     if (r.estado === 'PENDIENTE_VERIFICACION') return vistaCodigo(correo, 'verificar', r.mensaje);
     if (r.estado === 'PENDIENTE_APROBACION') {
       limpiarVista(); titulo('Acceso pendiente', function () { vistaAcceso('ingresar'); });
@@ -259,10 +308,14 @@
         go.onclick = function () {
           var correo = $('#correo').value.trim(), clave = $('#clave').value;
           if (!correo || !clave) return msgAcc('Ingrese su correo y su clave.');
-          if (sinSenal()) return;
           ocupado(go, true);
-          Sync.post({ accion: 'ingresar', correo: correo, clave: clave }).then(function (r) { return tratarAcceso(r, correo); })
-            .catch(function (e) { ocupado(go, false); msgAcc(esc(e.message)); });
+          if (!navigator.onLine) return entrarSinSenal(correo, clave, go);
+          Sync.post({ accion: 'ingresar', correo: correo, clave: clave }, 20000).then(function (r) { return tratarAcceso(r, correo, clave); })
+            .catch(function (e) {
+              // Señal débil: el teléfono dice estar en línea pero el servidor no responde
+              if (e && e.red) return entrarSinSenal(correo, clave, go);
+              ocupado(go, false); msgAcc(esc(e.message));
+            });
         };
       } else if (pestana === 'registro') {
         go.onclick = function () {
@@ -288,11 +341,14 @@
       campoAcc('adm', 'Código de administrador', 'password', 'autocomplete="off" autocapitalize="characters"') +
       '<button class="btn primario" id="go">Ingresar</button></div><div id="msg"></div>';
     $('#go').onclick = function () {
-      var c = $('#adm').value.trim(); if (!c) return;
-      if (sinSenal()) return;
+      var c = $('#adm').value.trim().toUpperCase(); if (!c) return;
       ocupado($('#go'), true);
-      Sync.post({ accion: 'ingresarAdmin', codigo: c }).then(function (r) { return tratarAcceso(r, 'ADMINISTRADOR'); })
-        .catch(function (e) { ocupado($('#go'), false); msgAcc(esc(e.message)); });
+      if (!navigator.onLine) return entrarSinSenal('ADMINISTRADOR', c, $('#go'));
+      Sync.post({ accion: 'ingresarAdmin', codigo: c }, 20000).then(function (r) { return tratarAcceso(r, 'ADMINISTRADOR', c); })
+        .catch(function (e) {
+          if (e && e.red) return entrarSinSenal('ADMINISTRADOR', c, $('#go'));
+          ocupado($('#go'), false); msgAcc(esc(e.message));
+        });
     };
   }
 
