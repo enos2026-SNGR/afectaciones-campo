@@ -21,7 +21,8 @@ var CATALOGOS = {
                              'Alojamiento temporal', 'Colchones y cobijas', 'Bombas de achique',
                              'Maquinaria', 'Atención de salud', 'Ninguna'],
   'Etiqueta Foto': ['Vista general', 'Viviendas', 'Vía', 'Servicios', 'Albergue'],
-  'Tipo Geometría': ['Área inundada', 'Tramo de vía']
+  'Tipo Geometría': ['Zona afectada', 'Tramo de vía', 'Cauce desbordado', 'Punto crítico'],
+  'Detalle Punto Crítico': ['Vivienda afectada', 'Alcantarilla o sumidero obstruido', 'Deslizamiento', 'Hundimiento o socavón', 'Infraestructura pública afectada', 'Otro']
 };
 
 var CIFRAS_OBLIGATORIAS = [
