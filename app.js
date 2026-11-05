@@ -138,7 +138,7 @@
     marca(false);
     detenerGPS();
     if (S.detenerExtra) { S.detenerExtra(); S.detenerExtra = null; }
-    S.alUbicar = null; S.alTipo = null;
+    S.alUbicar = null; S.alTipo = null; S.alGPS = null; S.marcarSitio = null; S.marcandoSitio = false;
     document.body.classList.remove('dibujando');
     if (S.mapa) { S.mapa.remove(); S.mapa = null; }
     $('#navpasos').innerHTML = '';
@@ -773,26 +773,25 @@
     $('#selParroquia').innerHTML = ca && pv ? opcionesDPA(DPA[pv].c[ca].p, pa, 'Elegir…') : '<option value="">Primero elija el cantón</option>';
   }
 
-  function pasoUbicacion(cuerpo) {
+  function pasoUbicacion(cuerpo, abajo) {
     var f = S.ficha;
     var h = '';
     if (f.tipo === 'ACTUALIZACION') {
-      h += '<div class="tarjeta"><span class="chip">' + esc(f.valores['Tipo de Evento'] || 'Inundación') + '</span><br><b>' + esc(f.valores['Parroquia']) + ', ' + esc(f.valores['Cantón']) + (f.valores['Provincia'] ? ', ' + esc(f.valores['Provincia']) : '') + '</b><br><span class="muted">La ubicación del evento ya está registrada.</span></div>';
-      cuerpo.innerHTML = h + campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio Las Ninfas, calle principal');
-      enlazarTexto(cuerpo);
+      cuerpo.innerHTML = '<div class="tarjeta"><span class="chip">' + esc(f.valores['Tipo de Evento'] || 'Inundación') + '</span><br><b>' + esc(f.valores['Parroquia']) + ', ' + esc(f.valores['Cantón']) + (f.valores['Provincia'] ? ', ' + esc(f.valores['Provincia']) : '') + '</b><br><span class="muted">La ubicación del evento ya está registrada.</span></div>';
+      abajo.innerHTML = campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio Las Ninfas, calle principal');
+      enlazarTexto(abajo);
       return;
     }
     if (f.tipo === 'INICIAL') {
-      h += '<div class="campo" data-campo="Tipo de Evento"><div class="etq">Tipo de evento <span class="oblig">*</span></div><div class="opciones una">' +
+      h += '<div class="campo" data-campo="Tipo de Evento"><div class="etq">Tipo de evento <span class="oblig">*</span></div><div class="opciones">' +
         CATALOGOS['Tipo de Evento'].map(function (o) { return '<button type="button" class="op' + (f.valores['Tipo de Evento'] === o ? ' sel' : '') + '" data-tipoev="' + esc(o) + '">' + esc(o) + '</button>'; }).join('') + '</div></div>';
     }
-    h += '<div id="gps"></div>';
-    h += '<div class="campo"><div class="etq">Provincia <span class="oblig">*</span></div><select id="selProv"></select></div>' +
+    cuerpo.innerHTML = h;
+    abajo.innerHTML = '<div class="campo"><div class="etq">Provincia <span class="oblig">*</span></div><select id="selProv"></select></div>' +
       '<div class="campo"><div class="etq">Cantón <span class="oblig">*</span></div><select id="selCanton"></select></div>' +
       '<div class="campo"><div class="etq">Parroquia <span class="oblig">*</span></div><select id="selParroquia"></select><p class="muted" id="msgParr"></p></div>' +
       campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio La Merced, calle principal');
-    cuerpo.innerHTML = h;
-    enlazarTexto(cuerpo);
+    enlazarTexto(abajo);
     $$('[data-tipoev]', cuerpo).forEach(function (b) {
       b.onclick = function () {
         var t = b.getAttribute('data-tipoev'), antes = f.valores['Tipo de Evento'];
@@ -861,50 +860,32 @@
     if (S.alUbicar) S.alUbicar();
     if (f.tipo === 'INICIAL') revisarCercanos();
   }
+  // Estado del GPS en una franja sobre el mapa de la ficha; el sitio se marca o se mueve en ese mismo mapa
   function pintarGPS() {
     var d = $('#gps'); if (!d) return;
     var f = S.ficha, u = f.ubicacion, e = S.gpsEstado || {};
+    if (S.alGPS) S.alGPS();
     if (u && u.aceptada) {
-      d.innerHTML = '<div class="gps bueno"><div class="prec">✓ ' + (u.metodo === 'GPS' ? Math.round(u.precision) + ' m' : 'Punto manual') + '</div>' +
-        '<div>' + u.lat.toFixed(5) + ', ' + u.lon.toFixed(5) + '</div>' +
-        '<div class="fila-btn" style="margin-top:10px"><button class="btn chico" id="gpsOtra">Volver a ubicar</button><button class="btn chico" id="gpsMapa">Ajustar en el mapa</button></div></div>';
+      d.innerHTML = '<div class="gps bueno compacto"><div><b>✓ Sitio del evento</b> · ' + (u.metodo === 'GPS' ? 'GPS ' + Math.round(u.precision) + ' m' : 'marcado en el mapa') +
+        '<br><span class="muted">' + u.lat.toFixed(5) + ', ' + u.lon.toFixed(5) + '</span></div>' +
+        '<div class="fila-btn"><button class="btn chico" id="gpsOtra">Volver a ubicar con GPS</button><button class="btn chico" id="gpsMapa">Mover en el mapa</button></div></div>';
       $('#gpsOtra').onclick = function () { f.ubicacion = null; guardar(); iniciarGPS(); pintarGPS(); if (S.alUbicar) S.alUbicar(); };
-      $('#gpsMapa').onclick = marcarEnMapa;
+      $('#gpsMapa').onclick = function () { if (S.marcarSitio) S.marcarSitio(); };
       return;
     }
+    if (S.marcandoSitio) { d.innerHTML = ''; return; }
     var seg = e.inicio ? Math.round((Date.now() - e.inicio) / 1000) : 0;
     var prec = e.mejor ? Math.round(e.mejor.precision) : null;
-    var h = '<div class="gps ' + (prec != null ? 'malo' : '') + '"><div class="muted">Precisión del GPS</div><div class="prec">' + (prec != null ? prec + ' m' : '…') + '</div>' +
-      '<div class="muted">Se acepta automáticamente al bajar de ' + CONFIG.PRECISION_ACEPTABLE_M + ' m · ' + seg + ' s</div>' +
-      (e.error ? '<div class="aviso alerta" style="margin-top:8px">' + esc(e.error) + '</div>' : '') +
-      '<p class="muted">Consejo: salga a un espacio abierto, lejos de muros y techos.</p>';
-    if (seg >= CONFIG.ESPERA_GPS_S || e.error) {
-      h += '<div class="fila-btn">' + (prec != null ? '<button class="btn chico" id="gpsUsar">Usar ' + prec + ' m</button>' : '') +
-        '<button class="btn chico primario" id="gpsMapa">Marcar en el mapa</button></div><button class="btn chico" id="gpsEsperar" style="margin-top:8px">Seguir esperando</button>';
-    } else {
-      h += '<button class="btn chico" id="gpsMapa">Marcar en el mapa</button>';
-    }
-    d.innerHTML = h + '</div>';
-    $('#gpsMapa').onclick = marcarEnMapa;
+    var largo = seg >= CONFIG.ESPERA_GPS_S || e.error;
+    var h = '<div class="gps compacto ' + (prec != null || e.error ? 'malo' : '') + '"><div><b>Sitio del evento: GPS ' + (prec != null ? prec + ' m' : '…') + '</b> · ' + seg + ' s' +
+      '<br><span class="muted">' + (e.error ? esc(e.error) : 'Se fija solo al bajar de ' + CONFIG.PRECISION_ACEPTABLE_M + ' m, o márquelo en el mapa.') + '</span></div>' +
+      '<div class="fila-btn">' + (largo && prec != null ? '<button class="btn chico" id="gpsUsar">Usar ' + prec + ' m</button>' : '') +
+      '<button class="btn chico' + (largo ? ' primario' : '') + '" id="gpsMapa">Marcar en el mapa</button>' +
+      (largo ? '<button class="btn chico" id="gpsEsperar">Seguir esperando</button>' : '') + '</div></div>';
+    d.innerHTML = h;
+    $('#gpsMapa').onclick = function () { if (S.marcarSitio) S.marcarSitio(); };
     if ($('#gpsUsar')) $('#gpsUsar').onclick = function () { aceptarUbicacion(e.mejor, 'GPS'); };
     if ($('#gpsEsperar')) $('#gpsEsperar').onclick = function () { e.inicio = Date.now(); e.error = null; if (S.gpsWatch == null) iniciarGPS(); pintarGPS(); };
-  }
-  function marcarEnMapa() {
-    detenerGPS();
-    var f = S.ficha;
-    var m = modal('<h2>Toque el mapa en el sitio afectado</h2><div class="mapa" id="mMapa"></div><p class="muted" id="mPos">Sin punto marcado.</p>' +
-      '<div class="fila-btn"><button class="btn" id="mNo">Cancelar</button><button class="btn primario" id="mSi" disabled>Usar este punto</button></div>');
-    var centro = f.ubicacion ? [f.ubicacion.lat, f.ubicacion.lon] : (S.gpsEstado && S.gpsEstado.mejor ? [S.gpsEstado.mejor.lat, S.gpsEstado.mejor.lon] : null);
-    var mapa = crearMapa($('#mMapa', m), centro, centro ? 16 : 7);
-    var punto = null, marcador = null;
-    mapa.on('click', function (ev) {
-      punto = { lat: ev.latlng.lat, lon: ev.latlng.lng };
-      if (marcador) marcador.setLatLng(ev.latlng); else marcador = L.marker(ev.latlng).addTo(mapa);
-      $('#mPos', m).textContent = punto.lat.toFixed(5) + ', ' + punto.lon.toFixed(5);
-      $('#mSi', m).disabled = false;
-    });
-    $('#mNo', m).onclick = function () { mapa.remove(); cerrarModal(); if (!(f.ubicacion && f.ubicacion.aceptada)) iniciarGPS(); pintarGPS(); };
-    $('#mSi', m).onclick = function () { mapa.remove(); cerrarModal(); aceptarUbicacion(punto, 'Manual'); };
   }
   // Detecta la parroquia con la capa parroquial simplificada (100 m); cerca de un límite puede fallar y se corrige a mano
   function detectarTerritorio(lat, lon) {
@@ -1173,15 +1154,13 @@
   }
 
   function textoZonas() {
-    $('#tituloZonas').innerHTML = (esMM() ? 'Área afectada' : 'Zonas afectadas') + ' <span class="muted" style="font-weight:500">(opcional)</span>';
-    $('#subZonas').textContent = esMM() ? 'Dibuje el área afectada por el movimiento en masa.' : 'Dibuje las zonas afectadas, los tramos de vía, los cauces desbordados y los puntos críticos. Puede dibujar varios de cada uno.';
+    $('#subZonas').textContent = esMM() ? 'En el mismo mapa, dibuje el área afectada (opcional).' : 'En el mismo mapa, dibuje lo que pueda (opcional, varios de cada uno).';
   }
   function pasoUbicacionZonas(cuerpo) {
     cuerpo.innerHTML = '<div id="ubic"></div>' +
-      '<h3 class="sec-zonas" id="tituloZonas"></h3>' +
-      '<p class="paso-sub" id="subZonas"></p>' +
-      '<div id="avisoZona"></div><div id="herr"></div><div class="mapa" id="mapaFicha"></div><div id="geoms"></div>';
-    pasoUbicacion($('#ubic'));
+      '<div id="gps"></div><p class="muted ayuda-zonas" id="subZonas"></p><div id="herr"></div><div class="mapa" id="mapaFicha"></div><div id="geoms"></div>' +
+      '<div id="ubicAbajo"></div>';
+    pasoUbicacion($('#ubic'), $('#ubicAbajo'));
     editorZonas();
     textoZonas();
   }
@@ -1214,8 +1193,6 @@
       f.geometrias.forEach(function (g, i) {
         capaGeo(g, color).on('click', function () { if (!modo) editarGeo(i); }).addTo(capaFicha);
       });
-      var hayZona = f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; });
-      $('#avisoZona').innerHTML = !hayZona && f.tipo === 'INICIAL' ? '<div class="aviso alerta">' + (esMM() ? 'Aún no se ha dibujado el área afectada.' : 'Aún no hay zonas afectadas dibujadas. Si puede, dibuje al menos una.') + '</div>' : '';
       $('#geoms').innerHTML = f.geometrias.map(function (g, i) {
         var t = nombreGeo(g.tipo) + (g.detalle ? ': ' + g.detalle : '');
         return '<div class="tarjeta geo-item" data-ver="' + i + '"><div style="flex:1"><b>' + esc(t) + '</b><br><span class="muted">' + medidaGeo(g) + '</span>' +
@@ -1270,7 +1247,10 @@
     }
     function herramientas() {
       var h;
-      if (!modo) {
+      if (modo === 'sitio') {
+        h = '<div class="aviso info"><b>Sitio del evento:</b> toque el mapa en el lugar afectado. Puede acercar el mapa con dos dedos antes de tocar.</div>' +
+          '<div class="herr"><button class="btn" id="hCancelar" style="grid-column:1/-1">Cancelar</button></div>';
+      } else if (!modo) {
         var lleno = f.geometrias.length >= MAX_GEOMETRIAS;
         h = lleno ? '<div class="aviso alerta">Llegó al máximo de ' + MAX_GEOMETRIAS + ' elementos en esta ficha.</div>' :
           '<div class="herr">' + tiposPermitidos().map(function (t) { return '<button class="btn" data-dibujar="' + esc(t) + '"' + (esMM() ? ' style="grid-column:1/-1"' : '') + '>+ ' + esc(nombreGeo(t)) + '</button>'; }).join('') +
@@ -1291,7 +1271,12 @@
       $$('[data-dibujar]').forEach(function (b) { b.onclick = function () { modo = b.getAttribute('data-dibujar'); verts = []; herramientas(); $('#herr').scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
       if ($('#hCaminar')) $('#hCaminar').onclick = iniciarCaminata;
       if ($('#hDeshacer')) $('#hDeshacer').onclick = function () { verts.pop(); pintarTemp(); herramientas(); };
-      if ($('#hCancelar')) $('#hCancelar').onclick = function () { terminarCaminata(); modo = null; verts = []; pintarTemp(); herramientas(); };
+      if ($('#hCancelar')) $('#hCancelar').onclick = function () {
+        var eraSitio = modo === 'sitio';
+        terminarCaminata(); modo = null; verts = []; S.marcandoSitio = false; pintarTemp(); herramientas();
+        if (eraSitio && !(f.ubicacion && f.ubicacion.aceptada)) iniciarGPS();
+        pintarGPS();
+      };
       if ($('#hTerminar')) $('#hTerminar').onclick = terminar;
     }
     function terminar() {
@@ -1319,6 +1304,11 @@
     function terminarCaminata() { if (caminar != null) { navigator.geolocation.clearWatch(caminar); caminar = null; } }
     S.detenerExtra = terminarCaminata;
     mapa.on('click', function (ev) {
+      if (modo === 'sitio') {
+        modo = null; S.marcandoSitio = false; herramientas();
+        aceptarUbicacion({ lat: ev.latlng.lat, lon: ev.latlng.lng }, 'Manual');
+        return;
+      }
       if (!modo || modo === 'caminar') return;
       verts.push([ev.latlng.lng, ev.latlng.lat]); pintarTemp();
       if (TIPOS_GEO[modo].forma === 'punto') { terminar(); return; }
@@ -1331,6 +1321,26 @@
       if (uu && uu.lat != null && !f.geometrias.length) mapa.setView([uu.lat, uu.lon], 17);
     };
     S.alTipo = function () { textoZonas(); pintarFicha(); herramientas(); };
+    // Marcar o mover el sitio del evento tocando este mismo mapa (sin ventana aparte)
+    S.marcarSitio = function () {
+      if (f.tipo !== 'INICIAL') return;
+      detenerGPS(); terminarCaminata();
+      modo = 'sitio'; verts = []; S.marcandoSitio = true; pintarTemp(); herramientas(); pintarGPS();
+      var e = S.gpsEstado || {};
+      if (!f.ubicacion && e.mejor) mapa.setView([e.mejor.lat, e.mejor.lon], Math.max(mapa.getZoom(), 16));
+      $('#herr').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    // Mientras el GPS busca, se muestra en el mapa la posición aproximada con su margen de error
+    var capaGPS = L.layerGroup().addTo(mapa), centrado = false;
+    S.alGPS = function () {
+      capaGPS.clearLayers();
+      var e = S.gpsEstado || {};
+      if ((f.ubicacion && f.ubicacion.aceptada) || !e.mejor || S.gpsWatch == null) return;
+      L.circle([e.mejor.lat, e.mejor.lon], { radius: e.mejor.precision, color: '#013254', weight: 1, fillOpacity: .08, interactive: false }).addTo(capaGPS);
+      L.circleMarker([e.mejor.lat, e.mejor.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#2a7de1', fillOpacity: 1, interactive: false }).addTo(capaGPS);
+      if (!centrado && !f.geometrias.length) { centrado = true; mapa.setView([e.mejor.lat, e.mejor.lon], 16); }
+    };
+    S.alGPS();
     pintarOtros(); pintarFicha(); herramientas();
     var g = capaFicha.getLayers().length > 1 ? L.featureGroup(capaFicha.getLayers()) : null;
     if (g) mapa.fitBounds(g.getBounds().pad(0.4), { maxZoom: 18 });

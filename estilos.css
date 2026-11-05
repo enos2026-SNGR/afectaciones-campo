@@ -228,3 +228,8 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--oro); borde
 .herr.tres .btn { padding-left: 6px; padding-right: 6px; }
 body.dibujando #navpasos { display: none; }
 body.dibujando #mapaFicha { height: calc(100vh - 360px); height: calc(100dvh - 360px); min-height: 260px; }
+/* Franja del GPS sobre el mapa de la ficha */
+.gps.compacto { text-align: left; padding: 10px 12px; margin-bottom: 10px; font-size: 15px; }
+.gps.compacto .fila-btn { margin-top: 8px; flex-wrap: wrap; }
+.gps.compacto .fila-btn .btn { flex: 1 1 40%; }
+.ayuda-zonas { margin: 4px 0 8px; }
