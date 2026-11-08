@@ -65,7 +65,8 @@
     var t = $('#toast'); t.textContent = msg; t.classList.add('ver');
     clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove('ver'); }, ms || 3200);
   }
-  var COLOR_ESTADO = { 'En curso': '#d62728', 'En atención': '#ff7f0e', 'Estabilizado': '#1f77b4', 'Cerrado': '#7f7f7f' };
+  // Activo y Sin evolución desde la versión 2.1; los demás son de eventos registrados antes
+  var COLOR_ESTADO = { 'Activo': '#d62728', 'Sin evolución': '#1f77b4', 'En curso': '#d62728', 'En atención': '#ff7f0e', 'Estabilizado': '#1f77b4', 'Cerrado': '#7f7f7f' };
 
   // ----------------------------------------------------------------
   // Estado de la app
@@ -76,6 +77,7 @@
   };
   var VACIO = {};
   var LISTAS = ['Origen', 'Nivel del Agua', 'Tendencia del Agua', 'Estado del Evento', 'Solicitud de Cierre',
+    'Hay Personas Afectadas', 'Hay Viviendas Afectadas', 'Descripción de la Afectación',
     'Agua Potable', 'Alcantarillado o Pozos Sépticos', 'Energía Eléctrica', 'Telefonía e Internet', 'Vía de Acceso',
     'Funcionamiento Edificaciones Públicas', 'Funcionamiento Muelles', 'Justificación de Baja', 'Provincia', 'Código Parroquia', 'Cantón', 'Parroquia', 'Sector', 'Descripción', 'Tipo de Evento'];
   var CIFRAS = Object.keys(ETIQUETAS);
@@ -571,6 +573,7 @@
       f.valores['Cantón'] = evento.canton; f.valores['Parroquia'] = evento.parroquia; f.valores['Sector'] = evento.sector;
       f.valores['Provincia'] = evento.provincia || ''; f.valores['Código Parroquia'] = evento.cod_parroquia || '';
       f.valores['Tipo de Evento'] = evento.tipo_evento || 'Inundación';
+      if (CATALOGOS['Estado del Evento'].indexOf(f.valores['Estado del Evento']) < 0) f.valores['Estado del Evento'] = '';
       f.base = clon(f.valores);
       f.ubicacion = { lat: evento.lat, lon: evento.lon, precision: null, metodo: evento.metodo || 'GPS', delEvento: true };
       f.geometrias = (evento.geometrias || []).map(geomDeServidor);
@@ -962,11 +965,6 @@
       campoOpciones('Nivel del Agua', CATALOGOS['Nivel del Agua'], 'Nivel del agua', { una: true }) +
       campoOpciones('Tendencia del Agua', CATALOGOS['Tendencia del Agua'], 'Tendencia del agua')) +
       campoOpciones('Estado del Evento', CATALOGOS['Estado del Evento'], 'Estado del evento', { oblig: true, info: 'estado' });
-    if (f.tipo !== 'CORRECCION') {
-      h += '<div class="tarjeta"><div class="etq" style="display:flex;gap:8px;align-items:center;font-weight:650">¿Solicitar el cierre del evento? ' + botonInfo('cierre') + '</div>' +
-        '<p class="muted">Solo si ya no hay afectación vigente. El administrador lo confirma.</p>' +
-        campoOpciones('Solicitud de Cierre', CATALOGOS['Solicitud de Cierre'], 'Motivo', { una: true }) + '</div>';
-    }
     h += '<div class="campo"><label for="t-desc">Descripción del evento</label><textarea id="t-desc" data-texto="Descripción" placeholder="Qué se observa en el sitio. Puede dictar con el micrófono del teclado.">' + esc(f.valores['Descripción']) + '</textarea></div>';
     cuerpo.innerHTML = h;
     enlazarOpciones(cuerpo);
@@ -975,29 +973,13 @@
 
   // ---------------- Paso 3: Personas y viviendas ----------------
   function pasoPersonas(cuerpo) {
-    var h = '<p class="paso-sub">Cada cifra inicia en "Sin dato". Toque <b>Ninguno</b> para registrar un cero verificado. ' + botonInfo('cifras') + '</p>' +
-      '<div id="avisosP"></div>' +
-      '<h3 style="display:flex;gap:8px;align-items:center">Personas y familias ' + botonInfo('personas') + '</h3>' +
-      ['Familias Afectadas', 'Personas Afectadas Directamente', 'Familias Damnificadas', 'Personas Damnificadas',
-       'Personas Evacuadas', 'Personas Albergadas', 'Personas en Familias Acogientes',
-       'Personas Heridas', 'Personas Fallecidas', 'Personas Desaparecidas'].map(function (c) { return contador(c); }).join('') +
-      '<div class="tarjeta" id="impact"></div>' +
-      campoMulti('Grupos Prioritarios', CATALOGOS['Grupos Prioritarios'], 'Grupos prioritarios presentes en el sitio') +
-      '<h3 style="display:flex;gap:8px;align-items:center">Viviendas ' + botonInfo('viviendas') + '</h3>' +
-      contador('Viviendas Afectadas') + contador('Viviendas Inhabitables') +
-      '<div id="bajaCont"></div>';
-    cuerpo.innerHTML = h;
-    function refrescar() {
-      var v = S.ficha.valores;
-      var pi = suma(v['Personas Afectadas Directamente'], v['Personas Damnificadas']);
-      var fi = suma(v['Familias Afectadas'], v['Familias Damnificadas']);
-      $('#impact').innerHTML = '<b>Impactadas (calculado)</b><br>Personas: ' + (pi === '' ? 'sin dato' : pi) + ' · Familias: ' + (fi === '' ? 'sin dato' : fi);
-      $('#avisosP').innerHTML = advertencias().map(function (a) { return '<div class="aviso alerta">' + esc(a) + '</div>'; }).join('');
-      pintarBaja($('#bajaCont'));
-    }
-    enlazarContadores(cuerpo, refrescar);
+    // Solo si hay afectación: en el momento de la visita no se conocen las cifras
+    cuerpo.innerHTML = '<p class="paso-sub">Indique si hay afectación. No se piden cifras.</p>' +
+      campoOpciones('Hay Personas Afectadas', CATALOGOS['Afectación'], '¿Hay personas afectadas?', { oblig: true, una: true }) +
+      campoOpciones('Hay Viviendas Afectadas', CATALOGOS['Afectación'], '¿Hay viviendas afectadas?', { oblig: true, una: true }) +
+      '<div class="campo"><label for="t-afect">Descripción de la afectación</label><textarea id="t-afect" data-texto="Descripción de la Afectación" placeholder="Qué afectación se observa en personas y viviendas. Puede dictar con el micrófono del teclado.">' + esc(S.ficha.valores['Descripción de la Afectación']) + '</textarea></div>';
     enlazarOpciones(cuerpo);
-    refrescar();
+    enlazarTexto(cuerpo);
   }
   function suma(a, b) {
     if (a === '' || b === '' || a == null || b == null) return '';
@@ -1096,7 +1078,7 @@
         d.firstChild.onclick = function () { var c2 = d.lastChild; c2.hidden = !c2.hidden; d.firstChild.textContent = c2.hidden ? 'Leyenda' : 'Ocultar leyenda'; };
         d = { root: d, cont: d.lastChild };
       } else d = { root: d, cont: d };
-      d.cont.innerHTML = Object.keys(COLOR_ESTADO).map(function (k) { return '<i style="background:' + COLOR_ESTADO[k] + '"></i>' + k; }).join('<br>') +
+      d.cont.innerHTML = CATALOGOS['Estado del Evento'].map(function (k) { return '<i style="background:' + COLOR_ESTADO[k] + '"></i>' + k; }).join('<br>') +
         (conTipos ? '<hr><span class="ls">📍</span>Sitio del evento<br><span class="lz"></span>Zona afectada<br><span class="lv"></span>Tramo de vía<br><span class="lc"></span>Cauce desbordado<br><span class="lp"></span>Punto crítico' : '');
       L.DomEvent.disableClickPropagation(d.root);
       return d.root;
@@ -1406,10 +1388,8 @@
     if (!v['Código Parroquia'] && !(f.tipo !== 'INICIAL' && v['Parroquia'])) b.push([1, 'Falta la provincia, el cantón o la parroquia']);
     if (!v['Estado del Evento']) b.push([2, 'Falta el estado del evento']);
     if (f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'punto' && !g.detalle; })) b.push([1, 'Falta indicar qué hay en un punto crítico (toque "Nota")']);
-    CIFRAS_OBLIGATORIAS.forEach(function (c) {
-      if (v[c] === '' || v[c] == null) b.push([c.indexOf('Vivienda') === 0 ? 3 : 3, 'Falta: ' + ETIQUETAS[c] + ' (use "Ninguno" si es cero)']);
-    });
-    if (bajasSinJustificar().length && !v['Justificación de Baja']) b.push([3, 'Falta justificar la baja de una cifra de afectación']);
+    if (!v['Hay Personas Afectadas']) b.push([3, 'Falta indicar si hay personas afectadas']);
+    if (!v['Hay Viviendas Afectadas']) b.push([3, 'Falta indicar si hay viviendas afectadas']);
     if (f.tipo === 'CORRECCION' && !Object.keys(diferencias()).length && !geometriaCambio()) b.push([1, 'No hay cambios que corregir']);
     return b;
   }
@@ -1420,18 +1400,13 @@
       advertencias().map(function (a) { return '<div class="aviso alerta" data-paso="3" style="cursor:pointer">' + esc(a) + '</div>'; }).join('') +
       (f.tipo === 'INICIAL' && !f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; }) ? '<div class="aviso alerta" data-paso="1" style="cursor:pointer">' + (esMM() ? 'No se dibujó el área afectada' : 'No se dibujó ninguna zona afectada') + '. Puede enviar igual o volver al mapa ›</div>' : '');
     function fila(et, val, paso) { return '<tr class="ir" data-paso="' + paso + '"><td>' + esc(et) + '</td><td><b>' + (val === '' || val == null ? '<span class="muted">Sin dato</span>' : esc(val)) + '</b></td></tr>'; }
-    var pi = suma(v['Personas Afectadas Directamente'], v['Personas Damnificadas']);
-    var fi = suma(v['Familias Afectadas'], v['Familias Damnificadas']);
     DB.porIndice('fotos', 'id_visita', f.id_visita).then(function (fotos) {
       $('#resumen').innerHTML =
         fila('Tipo de evento', v['Tipo de Evento'] || 'Inundación', 1) +
         fila('Sitio', (v['Sector'] || '') + (v['Parroquia'] ? ' · ' + v['Parroquia'] + ', ' + v['Cantón'] + (v['Provincia'] ? ', ' + v['Provincia'] : '') : ''), 1) +
-        fila('Estado', v['Estado del Evento'] + (v['Solicitud de Cierre'] ? ' (solicita cierre)' : ''), 2) +
-        fila('Familias afectadas / damnificadas', fmt(v['Familias Afectadas']) + ' / ' + fmt(v['Familias Damnificadas']), 3) +
-        fila('Personas afectadas / damnificadas', fmt(v['Personas Afectadas Directamente']) + ' / ' + fmt(v['Personas Damnificadas']), 3) +
-        fila('Impactadas (calculado)', 'Personas ' + fmt(pi) + ' · Familias ' + fmt(fi), 3) +
-        fila('Viviendas afectadas / inhabitables', fmt(v['Viviendas Afectadas']) + ' / ' + fmt(v['Viviendas Inhabitables']), 3) +
-        fila('Albergadas', fmt(v['Personas Albergadas']), 3) +
+        fila('Estado', v['Estado del Evento'], 2) +
+        fila('Personas afectadas', v['Hay Personas Afectadas'], 3) +
+        fila('Viviendas afectadas', v['Hay Viviendas Afectadas'], 3) +
         fila('Mapa', f.geometrias.length ? resumenGeo(f.geometrias) : 'Solo el punto del sitio', 1) +
         (f.tipo !== 'CORRECCION' ? fila('Fotos', String(fotos.length), PASO_ENVIO) : '');
       $$('[data-paso]').forEach(function (r) { r.onclick = function () { guardar(); vistaPaso(Number(r.getAttribute('data-paso'))); }; });

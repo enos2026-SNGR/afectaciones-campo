@@ -5,7 +5,8 @@ var CATALOGOS = {
   'Nivel del Agua': ['Sin agua', 'Hasta el tobillo (menos de 0,30 m)', 'Hasta la rodilla (0,30 a 0,50 m)',
                      'Hasta la cintura (0,50 a 1 m)', 'Sobre la cintura (más de 1 m)'],
   'Tendencia del Agua': ['Subiendo', 'Estable', 'Bajando', 'Sin agua'],
-  'Estado del Evento': ['En curso', 'En atención', 'Estabilizado'],
+  'Estado del Evento': ['Activo', 'Sin evolución'],
+  'Afectación': ['Sí', 'No', 'No se pudo verificar'],
   'Solicitud de Cierre': ['Familias retornaron y servicios restablecidos', 'Afectación atendida',
                           'Sin afectación verificada'],
   'Servicio': ['Sin afectación', 'Afectación parcial', 'Sin servicio', 'Sin dato'],
@@ -21,11 +22,8 @@ var CATALOGOS = {
   'Detalle Punto Crítico': ['Vivienda afectada', 'Alcantarilla o sumidero obstruido', 'Deslizamiento', 'Hundimiento o socavón', 'Infraestructura pública afectada', 'Otro']
 };
 
-var CIFRAS_OBLIGATORIAS = [
-  'Familias Afectadas', 'Personas Afectadas Directamente',
-  'Familias Damnificadas', 'Personas Damnificadas',
-  'Viviendas Afectadas', 'Viviendas Inhabitables'
-];
+// Desde la versión 2.1 la ficha no pide cifras de personas ni viviendas: solo si hay afectación (Sí, No, No se pudo verificar)
+var CIFRAS_OBLIGATORIAS = [];
 
 // Etiquetas cortas para la pantalla (la clave es el nombre de columna del Sheet)
 var ETIQUETAS = {
@@ -55,11 +53,10 @@ var DEFINICIONES = {
   'estado': {
     titulo: 'Estado del evento',
     items: [
-      ['En curso', 'La afectación sigue creciendo o hay agua presente.'],
-      ['En atención', 'Hay respuesta en el sitio, como bombeo, limpieza o albergue.'],
-      ['Estabilizado', 'El agua se retiró y no hay evolución, pero persisten consecuencias, por ejemplo familias albergadas o servicios sin restablecer.'],
-      ['Cerrado', 'Sin afectación vigente. El técnico no lo elige: solicita el cierre y el administrador lo confirma.']
-    ]
+      ['Activo', 'El fenómeno continúa: el agua está presente o sigue subiendo, o el terreno sigue en movimiento.'],
+      ['Sin evolución', 'El fenómeno se detuvo, aunque persistan sus consecuencias.']
+    ],
+    nota: 'Describe el fenómeno, no la respuesta. Si cambia, se registra con una actualización del evento.'
   },
   'personas': {
     titulo: 'Afectadas, damnificadas e impactadas',
