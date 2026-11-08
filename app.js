@@ -1098,7 +1098,7 @@
         d = { root: d, cont: d.lastChild };
       } else d = { root: d, cont: d };
       d.cont.innerHTML = Object.keys(COLOR_ESTADO).map(function (k) { return '<i style="background:' + COLOR_ESTADO[k] + '"></i>' + k; }).join('<br>') +
-        (conTipos ? '<hr><span class="lz"></span>Zona afectada<br><span class="lv"></span>Tramo de vía<br><span class="lc"></span>Cauce desbordado<br><span class="lp"></span>Punto crítico' : '');
+        (conTipos ? '<hr><span class="ls">📍</span>Sitio del evento<br><span class="lz"></span>Zona afectada<br><span class="lv"></span>Tramo de vía<br><span class="lc"></span>Cauce desbordado<br><span class="lp"></span>Punto crítico' : '');
       L.DomEvent.disableClickPropagation(d.root);
       return d.root;
     };
@@ -1155,6 +1155,8 @@
     $('#subZonas').textContent = esMM() ? 'En el mismo mapa, dibuje el área afectada (opcional).' : 'En el mismo mapa, dibuje lo que pueda (opcional, varios de cada uno).';
   }
   var ICONO_GEO = { poligono: '⬠', linea: '〰', punto: '◆' };
+  var ICONO_SITIO = L.divIcon({ className: 'pin-sitio', iconSize: [34, 46], iconAnchor: [17, 45],
+    html: '<svg viewBox="0 0 34 46" width="34" height="46" aria-label="Sitio del evento"><path d="M17 1C8.2 1 1 8 1 16.8 1 28.5 17 45 17 45s16-16.5 16-28.2C33 8 25.8 1 17 1z" fill="#D62828" stroke="#fff" stroke-width="2"/><circle cx="17" cy="16.5" r="6" fill="#fff"/></svg>' });
   var CORTO_GEO = { 'Zona afectada': 'Zona', 'Tramo de vía': 'Vía', 'Cauce desbordado': 'Cauce', 'Punto crítico': 'Punto' };
   function pasoUbicacionZonas(cuerpo) {
     cuerpo.innerHTML = '<div id="ubic"></div>' +
@@ -1190,7 +1192,8 @@
       capaFicha.clearLayers();
       var color = COLOR_ESTADO[f.valores['Estado del Evento']] || '#013254';
       var uu = f.ubicacion;
-      if (uu && uu.lat != null) L.circleMarker([uu.lat, uu.lon], { radius: 9, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 }).bindTooltip('Sitio del evento').addTo(capaFicha);
+      // Sitio del evento: globito rojo; no captura toques, así se puede dibujar encima
+      if (uu && uu.lat != null) L.marker([uu.lat, uu.lon], { icon: ICONO_SITIO, interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(capaFicha);
       f.geometrias.forEach(function (g, i) {
         capaGeo(g, color).on('click', function () { if (!modo) editarGeo(i); }).addTo(capaFicha);
       });

@@ -242,3 +242,5 @@ body.dibujando #mapaFicha { height: calc(100vh - 300px); height: calc(100dvh - 3
 .gps.compacto .prec { font-size: inherit; }
 .enlace { background: none; border: 0; padding: 4px 0; color: var(--azul, #013254); font: inherit; font-weight: 700; text-decoration: underline; }
 .ayuda-zonas { margin: 4px 0 8px; }
+.pin-sitio { background: none; border: 0; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+.leyenda-mapa .ls { display: inline-block; width: 16px; margin-right: 6px; text-align: center; }
