@@ -1,14 +1,14 @@
 /* Service worker: abre la app sin conexión, guarda teselas del mapa y sincroniza en segundo plano (Android) */
 importScripts('config.js', 'db.js', 'sync.js');
 
-var APP = 'campo-app-v14';
+var APP = 'campo-app-v15';
 var TESELAS = 'campo-teselas-v2';
 var ARCHIVOS = [
   './', 'index.html', 'app.js', 'estilos.css', 'config.js', 'catalogos.js', 'db.js', 'sync.js',
   'manifest.webmanifest', 'icons/icono-192.png', 'icons/icono-512.png', 'img/logo-sngr.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png', 'mapa.js',
   'vendor/protomaps/pmtiles.js', 'vendor/protomaps/protomaps-leaflet.js',
-  'datos/dpa.js', 'datos/parroquias.geojson', 'shp.js'
+  'datos/dpa.js', 'datos/parroquias.geojson', 'shp.js', 'reporte.js', 'vendor/jspdf/jspdf.umd.min.js'
 ];
 
 self.addEventListener('install', function (e) {

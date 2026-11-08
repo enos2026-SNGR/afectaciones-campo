@@ -633,6 +633,7 @@
       '<h3>Fichas de este evento</h3>' + (e.visitas || []).slice().reverse().map(function (x) {
         return '<div class="tarjeta">' + esc(fechaLegible(x.fecha)) + ' · ' + esc(x.tipo) + '<br><span class="muted">' + esc(x.tecnico) + (x.corregida ? ' · corregida' : '') + '</span></div>';
       }).join('') +
+      '<div class="fila-btn"><button class="btn" id="admPdf">Reporte PDF</button><button class="btn" id="admShp">Capas SHP</button></div>' +
       '<button class="btn primario" id="admAct">Actualizar este evento</button>';
     var mapa = S.mapa = crearMapa($('#mapaAdm'), [e.lat, e.lon], 16);
     var grupo = L.featureGroup().addTo(mapa);
@@ -640,6 +641,8 @@
     L.marker([e.lat, e.lon], { icon: ICONO_SITIO, interactive: false }).addTo(grupo);
     if (grupo.getLayers().length > 1) mapa.fitBounds(grupo.getBounds().pad(0.3), { maxZoom: 17 });
     $('#admAct').onclick = function () { nuevaFicha('ACTUALIZACION', e0); };
+    $('#admPdf').onclick = function () { pdfDeEvento(e0); };
+    $('#admShp').onclick = function () { shpDeEvento(e0); };
   }
 
   // ---------------- Reporte, tabla y capas SHP ----------------
@@ -664,7 +667,7 @@
     limpiarVista(); marcar('reportes'); titulo('Reporte y descargas', vistaInicio);
     $('#vista').innerHTML = '<div id="faMsg"></div><div id="faFiltros"></div><div id="repResumen"></div>' +
       '<div class="tarjeta"><h2>Descargar</h2>' +
-      '<button class="btn primario" id="repPdf">Reporte para imprimir o guardar en PDF</button>' +
+      '<button class="btn primario" id="repPdf">Reporte PDF</button>' +
       '<button class="btn" id="repShp">Capas SHP: sitios, áreas, líneas y puntos (ZIP)</button>' +
       '<button class="btn" id="repCsv">Tabla de eventos para Excel (CSV)</button>' +
       '<p class="muted">Según los filtros aplicados. Las capas van en WGS84 (EPSG:4326) y se abren en QGIS o ArcGIS.</p></div>';
@@ -675,9 +678,9 @@
     }
     filtrosAdmin($('#faFiltros'), pintar, false);
     traerTodo($('#faMsg'), pintar);
-    $('#repShp').onclick = function () { descargarArchivo(capasShp(eventosFiltrados()), 'Capas_SHP_afectaciones_SNGR_' + sello() + '.zip'); };
-    $('#repCsv').onclick = function () { descargarArchivo(tablaCsv(eventosFiltrados()), 'Eventos_afectaciones_SNGR_' + sello() + '.csv'); };
-    $('#repPdf').onclick = function () { imprimirReporte(eventosFiltrados()); };
+    $('#repShp').onclick = function () { ofrecerArchivo(capasShp(eventosFiltrados()), 'Capas_SHP_afectaciones_SNGR_' + sello() + '.zip', 'Capas SHP'); };
+    $('#repCsv').onclick = function () { ofrecerArchivo(tablaCsv(eventosFiltrados()), 'Eventos_afectaciones_SNGR_' + sello() + '.csv', 'Tabla de eventos'); };
+    $('#repPdf').onclick = function () { pdfResumen(eventosFiltrados()); };
   }
   function sello() { var d = new Date(Date.now() - 5 * 3600e3).toISOString(); return d.slice(0, 10) + '_' + d.slice(11, 16).replace(':', 'h'); }
   function descargarArchivo(blob, nombre) {
@@ -737,35 +740,105 @@
     return SHP.generar([{ nombre: 'sitios_evento', tipo: 'Point', campos: SIT, features: sitios }, { nombre: 'areas_afectadas', tipo: 'Polygon', campos: GEO, features: areas },
       { nombre: 'lineas_afectadas', tipo: 'LineString', campos: GEO, features: lineas }, { nombre: 'puntos_criticos', tipo: 'Point', campos: GEO, features: puntos }]);
   }
-  // Reporte en una página aparte del documento; el teléfono lo imprime o lo guarda en PDF
-  function imprimirReporte(l) {
+  // Reporte PDF de varios eventos (según filtros)
+  function pdfResumen(l) {
     if (!l.length) { toast('No hay eventos en los filtros aplicados'); return; }
     var porTerr = {};
     l.forEach(function (e) { if (e.posible_duplicado) return; var k = [e.provincia, e.canton, e.parroquia].join('|'); (porTerr[k] = porTerr[k] || []).push(e); });
     var c = function (a, fn) { return a.filter(fn).length; };
-    var d = document.createElement('div'); d.id = 'reporteImp';
-    d.innerHTML = '<div class="rep-cab"><img src="img/logo-sngr.png" alt="Gobierno del Ecuador, Secretaría Nacional de Gestión de Riesgos"><div><h1>Reporte de afectaciones registradas en territorio</h1>' +
-      '<p>Corte: ' + esc((function () { var d = new Date(Date.now() - 5 * 3600e3).toISOString(); return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) + ' ' + d.slice(11, 16); })()) + ' · Fuente: Registro de afectaciones, SNGR (fichas levantadas por los técnicos en territorio)</p><p><b>Alcance:</b> ' + esc(textoFiltros()) + '</p></div></div>' +
-      '<h2>Indicadores</h2><table class="rep-kpi"><tbody>' + indicadoresAdmin(l).map(function (k) { return '<tr><td>' + esc(k[0]) + '</td><td><b>' + esc(String(k[1])) + '</b></td><td>' + esc(k[2]) + '</td></tr>'; }).join('') + '</tbody></table>' +
-      '<p class="rep-nota">Los indicadores cuentan eventos, no personas ni viviendas: la ficha registra si hay afectación (Sí, No o No se pudo verificar). Los posibles duplicados no se cuentan hasta que el administrador los resuelva. Activo: el fenómeno continúa. Sin evolución: el fenómeno se detuvo, aunque persistan consecuencias.</p>' +
-      '<h2>Eventos por provincia, cantón y parroquia</h2><table><thead><tr><th>Provincia</th><th>Cantón</th><th>Parroquia</th><th>Eventos</th><th>Activos</th><th>Con personas afectadas</th><th>Con viviendas afectadas</th><th>Con infraestructura esencial</th><th>Área afectada (ha)</th></tr></thead><tbody>' +
-      Object.keys(porTerr).sort().map(function (k) {
-        var a = porTerr[k];
-        return '<tr><td>' + k.split('|').map(esc).join('</td><td>') + '</td><td>' + [a.length, c(a, function (e) { return e._estado === 'Activo'; }), c(a, function (e) { return e._hp === 'Sí'; }), c(a, function (e) { return e._hv === 'Sí'; }), c(a, function (e) { return e._hi === 'Sí'; }),
-          (a.reduce(function (s, e) { return s + e._area; }, 0) / 10000).toFixed(1).replace('.', ',')].join('</td><td>') + '</td></tr>';
-      }).join('') + '</tbody></table>' +
-      '<h2>Detalle de eventos</h2><table class="rep-det"><thead><tr><th>Evento</th><th>Ubicación</th><th>Estado</th><th>Afectación</th><th>Descripción</th></tr></thead><tbody>' +
-      l.slice().sort(function (a, b) { return (a.provincia + a.canton + a.parroquia) < (b.provincia + b.canton + b.parroquia) ? -1 : 1; }).map(function (e) {
-        var v = e.valores || {};
-        return '<tr><td>' + esc(e.id_evento) + '<br>' + esc(e._tipo) + (e.posible_duplicado ? '<br><i>posible duplicado</i>' : '') + '</td><td>' + esc(e.parroquia) + ', ' + esc(e.canton) + ', ' + esc(e.provincia || '') + '<br>' + esc(e.sector || '') + '<br>' + e.lat.toFixed(5) + ', ' + e.lon.toFixed(5) + '</td>' +
-          '<td>' + esc(e._estado) + '<br>' + esc(fechaLegible(e.ultima_obs)) + '</td><td>Personas: ' + esc(e._hp || 'sin dato') + '<br>Viviendas: ' + esc(e._hv || 'sin dato') + '<br>Infraestructura: ' + esc(e._hi === 'Sí' ? e._infra.join(', ') : (e._hi || 'sin dato')) + (e._area ? '<br>Área: ' + (e._area / 10000).toFixed(2).replace('.', ',') + ' ha' : '') + '</td>' +
-          '<td>' + esc(v['Descripción de la Afectación'] || v['Descripción'] || '') + '</td></tr>';
-      }).join('') + '</tbody></table>';
-    var viejo = $('#reporteImp'); if (viejo) viejo.remove();
-    document.body.appendChild(d); document.body.classList.add('imprimiendo');
-    var fin = function () { document.body.classList.remove('imprimiendo'); d.remove(); window.removeEventListener('afterprint', fin); };
-    window.addEventListener('afterprint', fin);
-    setTimeout(function () { window.print(); }, 300);
+    var territorio = Object.keys(porTerr).sort().map(function (k) {
+      var a = porTerr[k];
+      return k.split('|').concat([a.length, c(a, function (e) { return e._estado === 'Activo'; }), c(a, function (e) { return e._hp === 'Sí'; }), c(a, function (e) { return e._hv === 'Sí'; }),
+        c(a, function (e) { return e._hi === 'Sí'; }), (a.reduce(function (s, e) { return s + e._area; }, 0) / 10000).toFixed(1).replace('.', ',')]).map(String);
+    });
+    var detalle = l.slice().sort(function (a, b) { return (a.provincia + a.canton + a.parroquia) < (b.provincia + b.canton + b.parroquia) ? -1 : 1; }).map(function (e) {
+      var v = e.valores || {};
+      return [e.id_evento + '\n' + e._tipo + (e.posible_duplicado ? '\n(posible duplicado)' : ''),
+        [e.parroquia, e.canton, e.provincia].filter(Boolean).join(', ') + (e.sector ? '\n' + e.sector : '') + '\n' + Number(e.lat).toFixed(5) + ', ' + Number(e.lon).toFixed(5),
+        e._estado + '\n' + fechaLegible(e.ultima_obs),
+        'Personas: ' + (e._hp || 'sin dato') + '\nViviendas: ' + (e._hv || 'sin dato') + '\nInfraestructura: ' + (e._hi === 'Sí' ? e._infra.join(', ') : (e._hi || 'sin dato')) + (e._area ? '\nÁrea: ' + (e._area / 10000).toFixed(2).replace('.', ',') + ' ha' : ''),
+        v['Descripción de la Afectación'] || v['Descripción'] || ''];
+    });
+    toast('Generando el reporte…', 1500);
+    ReportePDF.resumen({ alcance: textoFiltros(), indicadores: indicadoresAdmin(l), territorio: territorio, detalle: detalle })
+      .then(function (b) { ofrecerArchivo(b, 'Reporte_afectaciones_SNGR_' + sello() + '.pdf', 'Reporte'); })
+      .catch(function (e) { toast('No se pudo generar el reporte: ' + e.message); });
+  }
+
+  // ---------------- Reporte PDF y capas SHP de un evento o de una ficha ----------------
+  // Convierte una ficha del teléfono al formato de evento del servidor (para el PDF y el SHP)
+  function eventoDeFicha(f) {
+    var v = f.valores, u = f.ubicacion || {};
+    return {
+      id_evento: f.id_evento_servidor || f.id_evento, tipo_evento: v['Tipo de Evento'] || 'Inundación', provincia: v['Provincia'], canton: v['Cantón'], parroquia: v['Parroquia'],
+      cod_parroquia: v['Código Parroquia'], sector: v['Sector'], lat: u.lat, lon: u.lon, metodo: u.metodo, precision: u.precision, estado: v['Estado del Evento'],
+      ultima_obs: f.fecha_observacion, fecha_registro: f.tipo === 'INICIAL' ? f.fecha_observacion : '', tecnico_ultima: f.autor, valores: v, visitas: [],
+      geometrias: (f.geometrias || []).filter(function (g) { return g.tipo !== 'Línea'; }).map(function (g) {
+        var x = geomAServidor(g), fm = formaGeo(g.tipo);
+        x.area_m2 = fm === 'poligono' ? Math.round(areaM2(g.coordenadas)) : ''; x.longitud_m = fm === 'linea' ? Math.round(longitud(g.coordenadas)) : ''; x.visita = f.id_visita;
+        return x;
+      })
+    };
+  }
+  function datosReporte(e, fotos, tipoFicha, aviso) {
+    var a = eventoAdmin(e);
+    return {
+      id_evento: a.id_evento, tipo_evento: a._tipo, tipo_ficha: tipoFicha, aviso: aviso, provincia: a.provincia, canton: a.canton, parroquia: a.parroquia, cod: a.cod_parroquia,
+      sector: a.sector, lat: Number(a.lat), lon: Number(a.lon), metodo: a.metodo, precision: a.precision, fecha: fechaCompleta(a.ultima_obs), tecnico: a.tecnico_ultima,
+      v: Object.assign({}, a.valores || {}, { 'Estado del Evento': a._estado }), hayP: a._hp, hayV: a._hv, fotos: fotos || [],
+      geoms: (a.geometrias || []).map(function (g) {
+        var t = grupoGeo(g.tipo);
+        return { tipo: t, geojson: g.geojson, nombre: nombreGeo(t), detalle: g.detalle || '', nota: g.nota || '',
+          medida: g.area_m2 ? 'Área ' + Math.round(g.area_m2).toLocaleString('es') + ' m2 (' + (g.area_m2 / 10000).toFixed(2).replace('.', ',') + ' ha)' : g.longitud_m ? 'Longitud ' + metros(Number(g.longitud_m)) : '' };
+      })
+    };
+  }
+  // Fecha con año y hora local de Ecuador, para los reportes
+  function fechaCompleta(x) {
+    if (!x) return '';
+    var t = /^\d{4}-\d{2}-\d{2} /.test(x) ? new Date(x.replace(' ', 'T') + '-05:00').getTime() : new Date(x).getTime();
+    if (isNaN(t)) return String(x);
+    var d = new Date(t - 5 * 3600e3).toISOString();
+    return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) + ' ' + d.slice(11, 16);
+  }
+  function nombreArchivo(base, id, ext) { return base + '_' + String(id).replace(/[^A-Za-z0-9-]/g, '') + '_' + sello() + '.' + ext; }
+  // PDF de una ficha del teléfono (antes o después de enviarla)
+  function pdfDeFicha(f) {
+    if (!f.ubicacion || f.ubicacion.lat == null) { toast('La ficha aún no tiene ubicación'); return; }
+    toast('Generando el reporte…', 1500);
+    DB.porIndice('fotos', 'id_visita', f.id_visita).then(function (fs) {
+      var tipo = f.tipo === 'INICIAL' ? 'Registro inicial' : f.tipo === 'ACTUALIZACION' ? 'Actualización' : 'Corrección';
+      var aviso = f.estado === 'enviada' ? '' : 'Ficha aún no enviada al servidor (' + ({ borrador: 'borrador', pendiente: 'pendiente de envío', error: 'con error' }[f.estado] || f.estado) + ').';
+      return ReportePDF.ficha(datosReporte(eventoDeFicha(f), fs.filter(function (x) { return x.blob; }), tipo, aviso));
+    }).then(function (b) { ofrecerArchivo(b, nombreArchivo('Reporte', f.id_evento, 'pdf'), 'Reporte de la ficha'); })
+      .catch(function (e) { toast('No se pudo generar el reporte: ' + e.message); });
+  }
+  function shpDeFicha(f) {
+    if (!f.ubicacion || f.ubicacion.lat == null) { toast('La ficha aún no tiene ubicación'); return; }
+    ofrecerArchivo(capasShp([eventoAdmin(eventoDeFicha(f))]), nombreArchivo('Capas_SHP', f.id_evento, 'zip'), 'Capas SHP de la ficha');
+  }
+  function pdfDeEvento(e) {
+    toast('Generando el reporte…', 1500);
+    ReportePDF.ficha(datosReporte(e, [], 'Situación según la última visita', 'Las fotos de este evento están en la carpeta de Drive del registro.'))
+      .then(function (b) { ofrecerArchivo(b, nombreArchivo('Reporte', e.id_evento, 'pdf'), 'Reporte del evento'); })
+      .catch(function (x) { toast('No se pudo generar el reporte: ' + x.message); });
+  }
+  function shpDeEvento(e) { ofrecerArchivo(capasShp([eventoAdmin(e)]), nombreArchivo('Capas_SHP', e.id_evento, 'zip'), 'Capas SHP del evento'); }
+  // El archivo se ofrece en una ventana: Descargar lo guarda en Descargas; Compartir lo envía por WhatsApp, correo o Drive
+  function ofrecerArchivo(blob, nombre, titulo) {
+    if (!blob) { toast('No hay datos para generar el archivo'); return; }
+    var archivo = null; try { archivo = new File([blob], nombre, { type: blob.type }); } catch (x) {}
+    var puede = !!(archivo && navigator.canShare && navigator.canShare({ files: [archivo] }));
+    var m = modal('<h2>' + esc(titulo) + ' listo</h2><p class="muted">' + esc(nombre) + ' · ' + Math.max(1, Math.round(blob.size / 1024)) + ' KB</p>' +
+      '<button class="btn primario" id="mDesc">Descargar</button>' + (puede ? '<button class="btn" id="mComp">Compartir (WhatsApp, correo, Drive)</button>' : '') +
+      '<button class="btn" id="mCerrar">Cerrar</button>');
+    $('#mDesc', m).onclick = function () {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+      toast('Guardado en Descargas');
+    };
+    if (puede) $('#mComp', m).onclick = function () { navigator.share({ files: [archivo], title: nombre }).catch(function () {}); };
+    $('#mCerrar', m).onclick = cerrarModal;
   }
 
   function vistaElegirEvento() {
@@ -1663,7 +1736,9 @@
         '<div class="fotos" id="listaFotos" style="margin-top:12px"></div></div>';
     }
     h += '<div class="tarjeta"><h2>Resumen</h2><div id="bloqueos"></div><table class="resumen" id="resumen"></table></div>' +
-      '<button class="btn accion" id="enviar">Enviar ficha</button>';
+      '<button class="btn accion" id="enviar">Enviar ficha</button>' +
+      '<div class="tarjeta"><h2>Reporte de esta ficha</h2><p class="muted">Funciona sin señal. También puede generarlo después desde "Mis fichas".</p>' +
+      '<div class="fila-btn"><button class="btn" id="fPdf">Reporte PDF</button><button class="btn" id="fShp">Capas SHP</button></div></div>';
     cuerpo.innerHTML = h;
     if (f.tipo !== 'CORRECCION') {
       $('#fCam').onchange = function () { agregarFotos(this.files, f.id_visita).then(function () { pintarFotos(); }); this.value = ''; };
@@ -1672,6 +1747,8 @@
     }
     pintarResumen();
     $('#enviar').onclick = enviarFicha;
+    $('#fPdf').onclick = function () { guardar(); pdfDeFicha(S.ficha); };
+    $('#fShp').onclick = function () { guardar(); shpDeFicha(S.ficha); };
   }
   function bloqueos() {
     var f = S.ficha, v = f.valores, b = [];
@@ -1825,7 +1902,11 @@
       var enLinea = navigator.onLine;
       var m = modal('<h2>' + (enLinea ? 'Enviando…' : 'Guardada en el teléfono') + '</h2><p id="mTxt">' +
         (enLinea ? 'La ficha queda como enviada solo cuando el servidor confirma que la recibió.' : 'Se enviará automáticamente cuando haya señal.') + '</p>' +
+        '<div class="fila-btn"><button class="btn" id="mPdf">Reporte PDF</button><button class="btn" id="mShp">Capas SHP</button></div>' +
         '<button class="btn primario" id="mOk">Ir al inicio</button>');
+      var fEnv = S.ficha;
+      $('#mPdf', m).onclick = function () { pdfDeFicha(fEnv); };
+      $('#mShp', m).onclick = function () { shpDeFicha(fEnv); };
       $('#mOk', m).onclick = function () { cerrarModal(); S.ficha = null; cargarDatos().then(vistaInicio); };
       if (enLinea) {
         Sync.sincronizar().then(function (r) {
@@ -1869,7 +1950,8 @@
           (fs.length ? '<div class="muted">Fotos: ' + (f.estado === 'enviada' && fe < fs.length ? 'subiendo ' + fe + ' de ' + fs.length : fs.length) + '</div>' : '') +
           (f.error ? '<div class="aviso ' + (f.estado === 'error' ? 'error' : 'alerta') + '" style="margin-top:8px">' + esc(f.error) + '</div>' : '') +
           (f.avisos && f.avisos.length ? '<div class="aviso info" style="margin-top:8px">' + esc(f.avisos.join('. ')) + '</div>' : '') +
-          '<div class="fila-btn" style="margin-top:10px;flex-wrap:wrap">' + acciones + '</div></div>';
+          '<div class="fila-btn" style="margin-top:10px;flex-wrap:wrap">' + acciones +
+          (f.ubicacion && f.ubicacion.lat != null && f.tipo !== 'CORRECCION' ? '<button class="btn chico" data-a="pdf">Reporte PDF</button><button class="btn chico" data-a="shp">SHP</button>' : '') + '</div></div>';
       }).join('') : '<p class="muted">Aún no hay fichas en este teléfono.</p>';
       $$('[data-a]').forEach(function (b) {
         b.onclick = function () {
@@ -1879,6 +1961,8 @@
           if (a === 'abrir') abrirFicha(f, f.estado === 'error' ? PASO_ENVIO : null);
           if (a === 'corregir') nuevaFicha('CORRECCION', null, f);
           if (a === 'fotos') vistaFotosPosteriores(f);
+          if (a === 'pdf') pdfDeFicha(f);
+          if (a === 'shp') shpDeFicha(f);
           if (a === 'borrar') confirmar('¿Descartar este borrador? Se perderán sus datos y fotos.', 'Descartar').then(function (ok) {
             if (!ok) return;
             DB.porIndice('fotos', 'id_visita', id).then(function (fs) { return Promise.all(fs.map(function (x) { return DB.del('fotos', x.id_foto); })); })
@@ -2103,6 +2187,8 @@
         if (e.data.tipo === 'fin' || e.data.tipo === 'eventos') cargarDatos().then(actualizarConexion);
       };
     }
+    // El generador de PDF se carga en segundo plano: así el reporte también funciona sin señal
+    setTimeout(function () { ReportePDF.cargar().catch(function () {}); }, 4000);
     fetch('datos/parroquias.geojson').then(function (r) { return r.ok ? r.json() : null; }).then(function (g) { S.parroquias = g; }).catch(function () {});
 
     if (!estaInstalada()) { vistaInstalar(); return; }
