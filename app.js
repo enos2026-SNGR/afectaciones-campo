@@ -441,6 +441,7 @@
       '<button class="btn primario" id="actualizar">Actualizar un evento</button>' +
       '<button class="btn" id="enviarYa"' + (pend.length ? '' : ' disabled') + '>Enviar ahora</button>' +
       '<button class="btn" data-ir="mis">Mis fichas</button>' +
+      (esAdmin() ? '<div class="tarjeta adm" style="margin-top:14px"><h2>Administración</h2><button class="btn primario" data-ir="todas">Todas las fichas levantadas</button><button class="btn" data-ir="reportes">Reporte y descargas (PDF, SHP, Excel)</button></div>' : '') +
       '<div class="tarjeta" style="margin-top:14px"><h2>Herramientas</h2>' +
       '<button class="btn" data-ir="mapaoff">Preparar mapa sin conexión</button>' +
       '<button class="btn" data-ir="respaldo">Respaldo entre teléfonos</button>' +
@@ -464,6 +465,7 @@
       b.onclick = function () {
         var d = b.getAttribute('data-ir');
         if (d === 'mis') vistaMisFichas(); else if (d === 'respaldo') vistaRespaldo(); else if (d === 'mapaoff') vistaMapaOffline();
+        else if (d === 'todas') vistaTodasFichas(); else if (d === 'reportes') vistaReportes();
       };
     });
     actualizarConexion();
@@ -499,6 +501,273 @@
   // Elegir evento para actualizar
   // ----------------------------------------------------------------
   var ultimaPos = null;
+
+  // ================================================================
+  // Administrador: todas las fichas levantadas, reporte y capas SHP
+  // (datos del servidor; sin señal se usan los últimos descargados)
+  // ================================================================
+  function esAdmin() { return !!(S.sesion && String(S.sesion.codigo).toUpperCase() === 'ADMINISTRADOR'); }
+  var ESTADO_ANTERIOR = { 'En curso': 'Activo', 'En atención': 'Activo', 'Estabilizado': 'Sin evolución', 'Cerrado': 'Sin evolución' };
+  // Registros anteriores a la versión 2.1: si tenían cifras, mayor a 0 es Sí
+  function hayDe(v, campo, cifras) {
+    if (v[campo]) return v[campo];
+    var n = cifras.map(function (c) { return v[c] === '' || v[c] == null ? null : Number(v[c]); }).filter(function (x) { return x != null && !isNaN(x); });
+    return n.length ? (n.some(function (x) { return x > 0; }) ? 'Sí' : 'No') : '';
+  }
+  function eventoAdmin(e) {
+    var v = e.valores || {}, area = 0, via = 0;
+    (e.geometrias || []).forEach(function (g) {
+      var t = grupoGeo(g.tipo);
+      if (t === 'Zona afectada') area += Number(g.area_m2) || 0;
+      if (t === 'Tramo de vía') via += Number(g.longitud_m) || 0;
+    });
+    return Object.assign({}, e, {
+      _estado: ESTADO_ANTERIOR[e.estado] || e.estado || '',
+      _tipo: e.tipo_evento || 'Inundación',
+      _hp: hayDe(v, 'Hay Personas Afectadas', ['Personas Afectadas Directamente', 'Personas Damnificadas', 'Familias Afectadas', 'Familias Damnificadas']),
+      _hv: hayDe(v, 'Hay Viviendas Afectadas', ['Viviendas Afectadas', 'Viviendas Inhabitables']),
+      _hi: v['Hay Infraestructura Esencial Afectada'] || '',
+      _infra: v['Infraestructura Esencial Afectada'] || [],
+      _area: area, _via: via, _fecha: e.fecha_registro || e.ultima_obs || ''
+    });
+  }
+  var FA = { prov: '', cant: '', tipo: '', estado: '', desde: '', hasta: '', texto: '' };
+  function eventosFiltrados() {
+    return S.eventos.map(eventoAdmin).filter(function (e) {
+      var cod = e.cod_parroquia || '';
+      if (FA.prov && cod.slice(0, 2) !== FA.prov) return false;
+      if (FA.cant && cod.slice(0, 4) !== FA.cant) return false;
+      if (FA.tipo && e._tipo !== FA.tipo) return false;
+      if (FA.estado && e._estado !== FA.estado) return false;
+      if (FA.desde && String(e._fecha).slice(0, 10) < FA.desde) return false;
+      if (FA.hasta && String(e._fecha).slice(0, 10) > FA.hasta) return false;
+      if (FA.texto) {
+        var t = FA.texto.toLowerCase();
+        if ([e.id_evento, e.sector, e.parroquia, e.canton, e.tecnico_ultima].join(' ').toLowerCase().indexOf(t) < 0) return false;
+      }
+      return true;
+    });
+  }
+  function textoFiltros() {
+    var p = [];
+    if (FA.prov) p.push('Provincia ' + DPA[FA.prov].n);
+    if (FA.cant) p.push('Cantón ' + DPA[FA.prov].c[FA.cant].n);
+    if (FA.tipo) p.push(FA.tipo);
+    if (FA.estado) p.push('Estado ' + FA.estado.toLowerCase());
+    if (FA.desde) p.push('desde ' + FA.desde);
+    if (FA.hasta) p.push('hasta ' + FA.hasta);
+    if (FA.texto) p.push('texto "' + FA.texto + '"');
+    return p.length ? p.join(' · ') : 'Todo el país, todos los eventos';
+  }
+  function filtrosAdmin(cont, alCambiar, conTexto) {
+    var opc = function (lista, sel, todos) { return '<option value="">' + todos + '</option>' + lista.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === sel ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join(''); };
+    var provs = Object.keys(DPA).sort(function (a, b) { return DPA[a].n < DPA[b].n ? -1 : 1; }).map(function (k) { return [k, DPA[k].n]; });
+    var cants = FA.prov ? Object.keys(DPA[FA.prov].c).map(function (k) { return [k, DPA[FA.prov].c[k].n]; }).sort(function (a, b) { return a[1] < b[1] ? -1 : 1; }) : [];
+    cont.innerHTML = '<div class="filtros-adm">' +
+      '<label>Provincia<select id="faProv">' + opc(provs, FA.prov, 'Todas') + '</select></label>' +
+      '<label>Cantón<select id="faCant"' + (FA.prov ? '' : ' disabled') + '>' + opc(cants, FA.cant, 'Todos') + '</select></label>' +
+      '<label>Tipo de evento<select id="faTipo">' + opc(CATALOGOS['Tipo de Evento'].map(function (x) { return [x, x]; }), FA.tipo, 'Todos') + '</select></label>' +
+      '<label>Estado<select id="faEst">' + opc(CATALOGOS['Estado del Evento'].map(function (x) { return [x, x]; }), FA.estado, 'Todos') + '</select></label>' +
+      '<label>Registrado desde<input type="date" id="faDesde" value="' + esc(FA.desde) + '"></label>' +
+      '<label>Hasta<input type="date" id="faHasta" value="' + esc(FA.hasta) + '"></label>' +
+      (conTexto ? '<label class="ancho">Buscar (ID, sector, parroquia, técnico)<input type="search" id="faTexto" value="' + esc(FA.texto) + '"></label>' : '') +
+      '</div><button class="btn chico" id="faLimpiar">Quitar filtros</button>';
+    var cambio = function () { filtrosAdmin(cont, alCambiar, conTexto); alCambiar(); };
+    $('#faProv', cont).onchange = function () { FA.prov = this.value; FA.cant = ''; cambio(); };
+    $('#faCant', cont).onchange = function () { FA.cant = this.value; cambio(); };
+    $('#faTipo', cont).onchange = function () { FA.tipo = this.value; alCambiar(); };
+    $('#faEst', cont).onchange = function () { FA.estado = this.value; alCambiar(); };
+    $('#faDesde', cont).onchange = function () { FA.desde = this.value; alCambiar(); };
+    $('#faHasta', cont).onchange = function () { FA.hasta = this.value; alCambiar(); };
+    if ($('#faTexto', cont)) $('#faTexto', cont).oninput = function () { FA.texto = this.value.trim(); clearTimeout(this._t); this._t = setTimeout(alCambiar, 250); };
+    $('#faLimpiar', cont).onclick = function () { FA = { prov: '', cant: '', tipo: '', estado: '', desde: '', hasta: '', texto: '' }; cambio(); };
+  }
+  // Trae del servidor todos los eventos y fichas; sin señal usa lo último descargado
+  function traerTodo(msg, listo) {
+    var hora = function () { return S.eventosHora ? fechaLegible(new Date(S.eventosHora).toISOString()) : 'nunca'; };
+    if (!navigator.onLine || !CONFIG.BACKEND_URL) { msg.innerHTML = '<div class="aviso alerta">Sin señal: se muestran los datos descargados el ' + esc(hora()) + '.</div>'; return listo(); }
+    msg.innerHTML = '<p class="muted">Descargando todas las fichas del servidor…</p>';
+    listo();
+    Sync.refrescarEventos(S.sesion).then(function (ev) {
+      S.eventos = ev; S.eventosHora = Date.now();
+      msg.innerHTML = '<p class="muted">Datos del servidor al ' + esc(hora()) + '.</p>'; listo();
+    }).catch(function (e) { msg.innerHTML = '<div class="aviso alerta">No se pudo actualizar (' + esc(e.message || 'sin conexión') + '). Datos del ' + esc(hora()) + '.</div>'; });
+  }
+  function chipsAdmin(e) {
+    return '<span class="chip">' + esc(e._tipo) + '</span><span class="chip ' + (e._estado === 'Activo' ? 'rojo' : 'azul') + '">' + esc(e._estado || 'sin estado') + '</span>' +
+      (e._hp === 'Sí' ? '<span class="chip amb">Personas afectadas</span>' : '') + (e._hv === 'Sí' ? '<span class="chip amb">Viviendas afectadas</span>' : '') +
+      (e._hi === 'Sí' ? '<span class="chip amb">Infraestructura esencial</span>' : '') + (e.posible_duplicado ? '<span class="chip rojo">Posible duplicado</span>' : '');
+  }
+  function vistaTodasFichas() {
+    limpiarVista(); marcar('todas'); titulo('Todas las fichas', vistaInicio);
+    $('#vista').innerHTML = '<div id="faMsg"></div><div id="faFiltros"></div><p class="muted" id="faCuenta"></p><div id="faLista"></div>';
+    function pintar() {
+      var l = eventosFiltrados().sort(function (a, b) { return msDe(b.ultima_obs) - msDe(a.ultima_obs); });
+      $('#faCuenta').textContent = l.length + ' evento(s) · ' + l.reduce(function (s, e) { return s + (e.visitas || []).length; }, 0) + ' ficha(s) entre registros iniciales y actualizaciones';
+      $('#faLista').innerHTML = l.slice(0, 300).map(function (e) {
+        return '<button class="item" data-id="' + esc(e.id_evento) + '"><div class="t">' + esc(e.sector || 'Sin sector') + ' <span class="muted" style="font-weight:500">· ' + esc(e.id_evento) + '</span></div>' +
+          '<div class="s">' + esc(e.parroquia) + ', ' + esc(e.canton) + (e.provincia ? ', ' + esc(e.provincia) : '') + ' · ' + (e.visitas || []).length + ' ficha(s) · última ' + fechaLegible(e.ultima_obs) + (e.tecnico_ultima ? ' por ' + esc(e.tecnico_ultima) : '') + '</div>' + chipsAdmin(e) + '</button>';
+      }).join('') + (l.length > 300 ? '<p class="muted">Se muestran los 300 más recientes. Use los filtros para acotar.</p>' : '') || '<p class="muted">No hay eventos con estos filtros.</p>';
+      $$('#faLista .item').forEach(function (b) { b.onclick = function () { vistaEventoAdmin(b.getAttribute('data-id')); }; });
+    }
+    filtrosAdmin($('#faFiltros'), pintar, true);
+    traerTodo($('#faMsg'), pintar);
+  }
+  function vistaEventoAdmin(id) {
+    var e0 = S.eventos.find(function (x) { return x.id_evento === id; }); if (!e0) return;
+    var e = eventoAdmin(e0), v = e.valores || {};
+    limpiarVista(); marcar('eventoAdm'); titulo(e.id_evento, vistaTodasFichas);
+    var fila = function (et, val) { val = Array.isArray(val) ? val.join(', ') : val; return '<tr><td>' + esc(et) + '</td><td><b>' + (val === '' || val == null ? '<span class="muted">sin dato</span>' : esc(val)) + '</b></td></tr>'; };
+    $('#vista').innerHTML = '<div class="tarjeta"><b>' + esc(e.sector || 'Sin sector') + '</b><br><span class="muted">' + esc(e.parroquia) + ', ' + esc(e.canton) + ', ' + esc(e.provincia || '') + ' · ' + esc(e.cod_parroquia || '') + '</span><br>' + chipsAdmin(e) + '</div>' +
+      '<div class="mapa chico" id="mapaAdm"></div>' +
+      '<h3>Última visita</h3><table class="resumen">' +
+      fila('Fecha', fechaLegible(e.ultima_obs)) + fila('Técnico', e.tecnico_ultima) + fila('Estado del evento', e._estado) +
+      (e._tipo === 'Inundación' ? fila('Origen', v['Origen']) : '') + (e._tipo !== 'Movimiento en masa' ? fila('Nivel del agua', v['Nivel del Agua']) + fila('Tendencia del agua', v['Tendencia del Agua']) : '') +
+      fila('Descripción del evento', v['Descripción']) + fila('¿Hay personas afectadas?', e._hp) + fila('¿Hay viviendas afectadas?', e._hv) + fila('Descripción de la afectación', v['Descripción de la Afectación']) +
+      fila('Agua potable', v['Agua Potable']) + fila('Alcantarillado', v['Alcantarillado o Pozos Sépticos']) + fila('Energía eléctrica', v['Energía Eléctrica']) + fila('Telefonía e internet', v['Telefonía e Internet']) +
+      fila('Vía de acceso', v['Vía de Acceso']) + fila('Infraestructura esencial afectada', e._hi) + (e._hi === 'Sí' ? fila('Cuál', e._infra) + (v['Otra Infraestructura Afectada'] ? fila('Otra', v['Otra Infraestructura Afectada']) : '') : '') +
+      fila('Necesidades inmediatas', v['Necesidades Inmediatas']) + '</table>' +
+      '<h3>Dibujos de afectación</h3>' + ((e.geometrias || []).length ? (e.geometrias || []).map(function (g) {
+        return '<div class="tarjeta"><b>' + esc(nombreGeo(g.tipo) + (g.detalle ? ': ' + g.detalle : '')) + '</b>' + (g.area_m2 ? '<br><span class="muted">Área ' + Math.round(g.area_m2).toLocaleString('es') + ' m²</span>' : '') + (g.longitud_m ? '<br><span class="muted">Longitud ' + metros(Number(g.longitud_m)) + '</span>' : '') + (g.nota ? '<br>' + esc(g.nota) : '') + '</div>';
+      }).join('') : '<p class="muted">Solo el punto del sitio.</p>') +
+      '<h3>Fichas de este evento</h3>' + (e.visitas || []).slice().reverse().map(function (x) {
+        return '<div class="tarjeta">' + esc(fechaLegible(x.fecha)) + ' · ' + esc(x.tipo) + '<br><span class="muted">' + esc(x.tecnico) + (x.corregida ? ' · corregida' : '') + '</span></div>';
+      }).join('') +
+      '<button class="btn primario" id="admAct">Actualizar este evento</button>';
+    var mapa = S.mapa = crearMapa($('#mapaAdm'), [e.lat, e.lon], 16);
+    var grupo = L.featureGroup().addTo(mapa);
+    (e.geometrias || []).forEach(function (g) { capaGeo(geomDeServidor(g), '#013254', {}).addTo(grupo); });
+    L.marker([e.lat, e.lon], { icon: ICONO_SITIO, interactive: false }).addTo(grupo);
+    if (grupo.getLayers().length > 1) mapa.fitBounds(grupo.getBounds().pad(0.3), { maxZoom: 17 });
+    $('#admAct').onclick = function () { nuevaFicha('ACTUALIZACION', e0); };
+  }
+
+  // ---------------- Reporte, tabla y capas SHP ----------------
+  function indicadoresAdmin(l) {
+    var base = l.filter(function (e) { return !e.posible_duplicado; });
+    var c = function (fn) { return base.filter(fn).length; };
+    var sinVer = function (n) { return n ? n + ' sin verificar' : ''; };
+    var edu = c(function (e) { return e._hi === 'Sí' && e._infra.indexOf('Institución educativa') >= 0; });
+    var sal = c(function (e) { return e._hi === 'Sí' && e._infra.indexOf('Centro de salud') >= 0; });
+    return [
+      ['Eventos registrados', base.length, l.length - base.length ? (l.length - base.length) + ' posibles duplicados aparte' : ''],
+      ['Eventos activos', c(function (e) { return e._estado === 'Activo'; }), ''],
+      ['Eventos sin evolución', c(function (e) { return e._estado === 'Sin evolución'; }), ''],
+      ['Hectáreas de áreas afectadas dibujadas', (base.reduce(function (s, e) { return s + e._area; }, 0) / 10000).toFixed(1).replace('.', ','), ''],
+      ['Eventos con personas afectadas', c(function (e) { return e._hp === 'Sí'; }), sinVer(c(function (e) { return e._hp !== 'Sí' && e._hp !== 'No'; }))],
+      ['Eventos con viviendas afectadas', c(function (e) { return e._hv === 'Sí'; }), sinVer(c(function (e) { return e._hv !== 'Sí' && e._hv !== 'No'; }))],
+      ['Eventos con infraestructura esencial afectada', c(function (e) { return e._hi === 'Sí'; }), 'educativa en ' + edu + ', salud en ' + sal],
+      ['Sitios con vía cerrada', c(function (e) { return (e.valores || {})['Vía de Acceso'] === 'Cerrada'; }), (base.reduce(function (s, e) { return s + e._via; }, 0) / 1000).toFixed(2).replace('.', ',') + ' km de vías dibujadas']
+    ];
+  }
+  function vistaReportes() {
+    limpiarVista(); marcar('reportes'); titulo('Reporte y descargas', vistaInicio);
+    $('#vista').innerHTML = '<div id="faMsg"></div><div id="faFiltros"></div><div id="repResumen"></div>' +
+      '<div class="tarjeta"><h2>Descargar</h2>' +
+      '<button class="btn primario" id="repPdf">Reporte para imprimir o guardar en PDF</button>' +
+      '<button class="btn" id="repShp">Capas SHP: sitios, áreas, líneas y puntos (ZIP)</button>' +
+      '<button class="btn" id="repCsv">Tabla de eventos para Excel (CSV)</button>' +
+      '<p class="muted">Según los filtros aplicados. Las capas van en WGS84 (EPSG:4326) y se abren en QGIS o ArcGIS.</p></div>';
+    function pintar() {
+      var l = eventosFiltrados();
+      $('#repResumen').innerHTML = '<div class="tarjeta"><b>' + esc(textoFiltros()) + '</b><div class="kpis-app">' +
+        indicadoresAdmin(l).map(function (k) { return '<div class="kpi-app"><div class="n">' + k[1] + '</div><div class="r">' + esc(k[0]) + '</div>' + (k[2] ? '<div class="c">' + esc(k[2]) + '</div>' : '') + '</div>'; }).join('') + '</div></div>';
+    }
+    filtrosAdmin($('#faFiltros'), pintar, false);
+    traerTodo($('#faMsg'), pintar);
+    $('#repShp').onclick = function () { descargarArchivo(capasShp(eventosFiltrados()), 'Capas_SHP_afectaciones_SNGR_' + sello() + '.zip'); };
+    $('#repCsv').onclick = function () { descargarArchivo(tablaCsv(eventosFiltrados()), 'Eventos_afectaciones_SNGR_' + sello() + '.csv'); };
+    $('#repPdf').onclick = function () { imprimirReporte(eventosFiltrados()); };
+  }
+  function sello() { var d = new Date(Date.now() - 5 * 3600e3).toISOString(); return d.slice(0, 10) + '_' + d.slice(11, 16).replace(':', 'h'); }
+  function descargarArchivo(blob, nombre) {
+    if (!blob) { toast('No hay eventos con ubicación en los filtros aplicados'); return; }
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+    toast('Archivo guardado en Descargas');
+  }
+  var COLUMNAS_CSV = [
+    ['ID Evento', function (e) { return e.id_evento; }], ['Tipo de evento', function (e) { return e._tipo; }],
+    ['Provincia', function (e) { return e.provincia; }], ['Cantón', function (e) { return e.canton; }], ['Parroquia', function (e) { return e.parroquia; }],
+    ['Código parroquia', function (e) { return e.cod_parroquia; }], ['Sector', function (e) { return e.sector; }],
+    ['Latitud', function (e) { return e.lat; }], ['Longitud', function (e) { return e.lon; }], ['Estado', function (e) { return e._estado; }],
+    ['Fecha de registro', function (e) { return e.fecha_registro || ''; }], ['Última observación', function (e) { return e.ultima_obs; }], ['Técnico última visita', function (e) { return e.tecnico_ultima; }],
+    ['Fichas', function (e) { return (e.visitas || []).length; }], ['Posible duplicado', function (e) { return e.posible_duplicado ? 'Sí' : 'No'; }],
+    ['Hay personas afectadas', function (e) { return e._hp; }], ['Hay viviendas afectadas', function (e) { return e._hv; }],
+    ['Descripción de la afectación', function (e) { return e.valores['Descripción de la Afectación']; }],
+    ['Hay infraestructura esencial afectada', function (e) { return e._hi; }], ['Infraestructura esencial afectada', function (e) { return e._infra.join(', '); }],
+    ['Otra infraestructura afectada', function (e) { return e.valores['Otra Infraestructura Afectada']; }],
+    ['Origen', function (e) { return e.valores['Origen']; }], ['Nivel del agua', function (e) { return e.valores['Nivel del Agua']; }], ['Tendencia del agua', function (e) { return e.valores['Tendencia del Agua']; }],
+    ['Descripción del evento', function (e) { return e.valores['Descripción']; }],
+    ['Agua potable', function (e) { return e.valores['Agua Potable']; }], ['Alcantarillado o pozos sépticos', function (e) { return e.valores['Alcantarillado o Pozos Sépticos']; }],
+    ['Energía eléctrica', function (e) { return e.valores['Energía Eléctrica']; }], ['Telefonía e internet', function (e) { return e.valores['Telefonía e Internet']; }],
+    ['Vía de acceso', function (e) { return e.valores['Vía de Acceso']; }], ['Necesidades inmediatas', function (e) { return (e.valores['Necesidades Inmediatas'] || []).join(', '); }],
+    ['Área afectada dibujada (m2)', function (e) { return Math.round(e._area); }], ['Vías afectadas dibujadas (m)', function (e) { return Math.round(e._via); }]
+  ];
+  // CSV con separador punto y coma y BOM para que Excel en español lo abra con tildes y columnas
+  function tablaCsv(l) {
+    if (!l.length) return null;
+    var cel = function (x) { x = x == null ? '' : String(x); return /[";\n\r]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+    var filas = [COLUMNAS_CSV.map(function (c) { return c[0]; }).join(';')].concat(l.map(function (e) {
+      e.valores = e.valores || {};
+      return COLUMNAS_CSV.map(function (c) { var x = c[1](e); return cel(typeof x === 'number' ? String(x).replace('.', ',') : x); }).join(';');
+    }));
+    return new Blob(['﻿' + filas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  }
+  function capasShp(l) {
+    var COM = [{ n: 'ID_EVENTO', t: 'C', k: 'id_evento' }, { n: 'TIPO_EVENT', t: 'C', k: 'tipo_evento' }, { n: 'PROVINCIA', t: 'C', k: 'provincia' }, { n: 'COD_PARR', t: 'C', k: 'cod_parroquia' },
+      { n: 'CANTON', t: 'C', k: 'canton' }, { n: 'PARROQUIA', t: 'C', k: 'parroquia' }, { n: 'SECTOR', t: 'C', k: 'sector' }, { n: 'ESTADO', t: 'C', k: 'estado' }];
+    var GEO = COM.concat([{ n: 'TIPO_GEOM', t: 'C', k: 'tipo' }, { n: 'DETALLE', t: 'C', k: 'detalle' }, { n: 'NOTA', t: 'C', k: 'nota' }, { n: 'ID_VISITA', t: 'C', k: 'id_visita' },
+      { n: 'LONG_M', t: 'N', k: 'longitud_m', d: 1 }, { n: 'AREA_M2', t: 'N', k: 'area_m2', d: 1 }]);
+    var SIT = COM.concat([{ n: 'FECHA_REG', t: 'C', k: 'fecha_registro' }, { n: 'ULT_OBS', t: 'C', k: 'ultima_obs' }, { n: 'HAY_PERS', t: 'C', k: 'hay_pers' }, { n: 'HAY_VIV', t: 'C', k: 'hay_viv' },
+      { n: 'DESC_AFEC', t: 'C', k: 'desc_afec' }, { n: 'HAY_INFRA', t: 'C', k: 'hay_infra' }, { n: 'INFRA', t: 'C', k: 'infra' }, { n: 'OTRA_INFRA', t: 'C', k: 'otra_infra' },
+      { n: 'NIVEL_AGUA', t: 'C', k: 'nivel_agua' }, { n: 'VIA', t: 'C', k: 'via' }, { n: 'LATITUD', t: 'N', k: 'lat', d: 6 }, { n: 'LONGITUD', t: 'N', k: 'lon', d: 6 }]);
+    var sitios = [], areas = [], lineas = [], puntos = [];
+    l.forEach(function (e) {
+      var v = e.valores || {};
+      var p = { id_evento: e.id_evento, tipo_evento: e._tipo, provincia: e.provincia, cod_parroquia: e.cod_parroquia || '', canton: e.canton, parroquia: e.parroquia, sector: e.sector, estado: e._estado };
+      if (isFinite(e.lat) && isFinite(e.lon)) sitios.push({ geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: Object.assign({ fecha_registro: e.fecha_registro || '', ultima_obs: e.ultima_obs,
+        hay_pers: e._hp, hay_viv: e._hv, desc_afec: v['Descripción de la Afectación'] || '', hay_infra: e._hi, infra: e._infra.join('; '), otra_infra: v['Otra Infraestructura Afectada'] || '',
+        nivel_agua: v['Nivel del Agua'] || '', via: v['Vía de Acceso'] || '', lat: e.lat, lon: e.lon }, p) });
+      (e.geometrias || []).forEach(function (g) {
+        var f = { geometry: g.geojson, properties: Object.assign({ tipo: nombreGeo(g.tipo), detalle: g.detalle || '', nota: g.nota || '', id_visita: g.visita || '', longitud_m: g.longitud_m, area_m2: g.area_m2 }, p) };
+        (g.geojson.type === 'Polygon' ? areas : g.geojson.type === 'LineString' ? lineas : puntos).push(f);
+      });
+    });
+    return SHP.generar([{ nombre: 'sitios_evento', tipo: 'Point', campos: SIT, features: sitios }, { nombre: 'areas_afectadas', tipo: 'Polygon', campos: GEO, features: areas },
+      { nombre: 'lineas_afectadas', tipo: 'LineString', campos: GEO, features: lineas }, { nombre: 'puntos_criticos', tipo: 'Point', campos: GEO, features: puntos }]);
+  }
+  // Reporte en una página aparte del documento; el teléfono lo imprime o lo guarda en PDF
+  function imprimirReporte(l) {
+    if (!l.length) { toast('No hay eventos en los filtros aplicados'); return; }
+    var porTerr = {};
+    l.forEach(function (e) { if (e.posible_duplicado) return; var k = [e.provincia, e.canton, e.parroquia].join('|'); (porTerr[k] = porTerr[k] || []).push(e); });
+    var c = function (a, fn) { return a.filter(fn).length; };
+    var d = document.createElement('div'); d.id = 'reporteImp';
+    d.innerHTML = '<div class="rep-cab"><img src="img/logo-sngr.png" alt="Gobierno del Ecuador, Secretaría Nacional de Gestión de Riesgos"><div><h1>Reporte de afectaciones registradas en territorio</h1>' +
+      '<p>Corte: ' + esc((function () { var d = new Date(Date.now() - 5 * 3600e3).toISOString(); return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) + ' ' + d.slice(11, 16); })()) + ' · Fuente: Registro de afectaciones, SNGR (fichas levantadas por los técnicos en territorio)</p><p><b>Alcance:</b> ' + esc(textoFiltros()) + '</p></div></div>' +
+      '<h2>Indicadores</h2><table class="rep-kpi"><tbody>' + indicadoresAdmin(l).map(function (k) { return '<tr><td>' + esc(k[0]) + '</td><td><b>' + esc(String(k[1])) + '</b></td><td>' + esc(k[2]) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<p class="rep-nota">Los indicadores cuentan eventos, no personas ni viviendas: la ficha registra si hay afectación (Sí, No o No se pudo verificar). Los posibles duplicados no se cuentan hasta que el administrador los resuelva. Activo: el fenómeno continúa. Sin evolución: el fenómeno se detuvo, aunque persistan consecuencias.</p>' +
+      '<h2>Eventos por provincia, cantón y parroquia</h2><table><thead><tr><th>Provincia</th><th>Cantón</th><th>Parroquia</th><th>Eventos</th><th>Activos</th><th>Con personas afectadas</th><th>Con viviendas afectadas</th><th>Con infraestructura esencial</th><th>Área afectada (ha)</th></tr></thead><tbody>' +
+      Object.keys(porTerr).sort().map(function (k) {
+        var a = porTerr[k];
+        return '<tr><td>' + k.split('|').map(esc).join('</td><td>') + '</td><td>' + [a.length, c(a, function (e) { return e._estado === 'Activo'; }), c(a, function (e) { return e._hp === 'Sí'; }), c(a, function (e) { return e._hv === 'Sí'; }), c(a, function (e) { return e._hi === 'Sí'; }),
+          (a.reduce(function (s, e) { return s + e._area; }, 0) / 10000).toFixed(1).replace('.', ',')].join('</td><td>') + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<h2>Detalle de eventos</h2><table class="rep-det"><thead><tr><th>Evento</th><th>Ubicación</th><th>Estado</th><th>Afectación</th><th>Descripción</th></tr></thead><tbody>' +
+      l.slice().sort(function (a, b) { return (a.provincia + a.canton + a.parroquia) < (b.provincia + b.canton + b.parroquia) ? -1 : 1; }).map(function (e) {
+        var v = e.valores || {};
+        return '<tr><td>' + esc(e.id_evento) + '<br>' + esc(e._tipo) + (e.posible_duplicado ? '<br><i>posible duplicado</i>' : '') + '</td><td>' + esc(e.parroquia) + ', ' + esc(e.canton) + ', ' + esc(e.provincia || '') + '<br>' + esc(e.sector || '') + '<br>' + e.lat.toFixed(5) + ', ' + e.lon.toFixed(5) + '</td>' +
+          '<td>' + esc(e._estado) + '<br>' + esc(fechaLegible(e.ultima_obs)) + '</td><td>Personas: ' + esc(e._hp || 'sin dato') + '<br>Viviendas: ' + esc(e._hv || 'sin dato') + '<br>Infraestructura: ' + esc(e._hi === 'Sí' ? e._infra.join(', ') : (e._hi || 'sin dato')) + (e._area ? '<br>Área: ' + (e._area / 10000).toFixed(2).replace('.', ',') + ' ha' : '') + '</td>' +
+          '<td>' + esc(v['Descripción de la Afectación'] || v['Descripción'] || '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    var viejo = $('#reporteImp'); if (viejo) viejo.remove();
+    document.body.appendChild(d); document.body.classList.add('imprimiendo');
+    var fin = function () { document.body.classList.remove('imprimiendo'); d.remove(); window.removeEventListener('afterprint', fin); };
+    window.addEventListener('afterprint', fin);
+    setTimeout(function () { window.print(); }, 300);
+  }
+
   function vistaElegirEvento() {
     limpiarVista(); marcar('elegir'); titulo('Actualizar un evento', vistaInicio);
     var eventos = listaEventos().filter(function (e) { return e.estado !== 'Cerrado'; });

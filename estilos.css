@@ -261,3 +261,33 @@ body.dibujando #mapaFicha { height: calc(100vh - 300px); height: calc(100dvh - 3
 .hbtn.sitio { background: #D62828; border-color: #D62828; color: #fff; }
 .hbtn.dib { border-color: var(--azul, #013254); color: var(--azul, #013254); }
 .sub-campo { margin: -4px 0 12px 12px; padding-left: 12px; border-left: 3px solid var(--azul, #013254); }
+/* Administración: filtros, indicadores y reporte para imprimir */
+.filtros-adm { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.filtros-adm label { display: flex; flex-direction: column; font-size: 13px; font-weight: 650; gap: 4px; min-width: 0; }
+.filtros-adm label.ancho { grid-column: 1 / -1; }
+.filtros-adm select, .filtros-adm input { width: 100%; min-width: 0; font-size: 14px; padding: 9px 6px; border: 1.5px solid var(--linea, #ccd3dd); border-radius: 8px; background: #fff; }
+.kpis-app { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.kpi-app { background: #f4f6f9; border-radius: 10px; padding: 10px; }
+.kpi-app .n { font-size: 24px; font-weight: 800; color: var(--azul, #013254); }
+.kpi-app .r { font-size: 13px; font-weight: 650; }
+.kpi-app .c { font-size: 12px; color: #5b6573; }
+.tarjeta.adm { border: 2px solid var(--oro, #FCB300); }
+table.resumen { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 12px; }
+table.resumen td { border-bottom: 1px solid #e3e7ec; padding: 6px 4px; vertical-align: top; }
+#reporteImp { display: none; }
+@media print {
+  body.imprimiendo > *:not(#reporteImp) { display: none !important; }
+  body.imprimiendo { background: #fff; min-height: 0; }
+  body.imprimiendo #reporteImp { display: block; color: #111; font-size: 10.5pt; }
+  #reporteImp .rep-cab { display: flex; gap: 14px; align-items: center; border-bottom: 3px solid #FCB300; padding-bottom: 8px; margin-bottom: 8px; }
+  #reporteImp .rep-cab img { height: 54px; }
+  #reporteImp h1 { font-size: 15pt; color: #013254; margin: 0 0 4px; }
+  #reporteImp h2 { font-size: 12pt; color: #013254; margin: 14px 0 6px; }
+  #reporteImp p { margin: 2px 0; }
+  #reporteImp table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+  #reporteImp th, #reporteImp td { border: 1px solid #b8c0cc; padding: 3px 5px; text-align: left; vertical-align: top; }
+  #reporteImp th { background: #013254; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #reporteImp tr { page-break-inside: avoid; }
+  #reporteImp .rep-nota { font-size: 9pt; color: #444; margin-top: 4px; }
+  @page { size: A4; margin: 14mm; }
+}
