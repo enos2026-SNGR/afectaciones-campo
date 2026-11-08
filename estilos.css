@@ -227,9 +227,18 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--oro); borde
 .herr.tres { grid-template-columns: 1fr 1fr 1fr; }
 .herr.tres .btn { padding-left: 6px; padding-right: 6px; }
 body.dibujando #navpasos { display: none; }
-body.dibujando #mapaFicha { height: calc(100vh - 360px); height: calc(100dvh - 360px); min-height: 260px; }
-/* Franja del GPS sobre el mapa de la ficha */
-.gps.compacto { text-align: left; padding: 10px 12px; margin-bottom: 10px; font-size: 15px; }
-.gps.compacto .fila-btn { margin-top: 8px; flex-wrap: wrap; }
-.gps.compacto .fila-btn .btn { flex: 1 1 40%; }
+body.dibujando #mapaFicha { height: calc(100vh - 300px); height: calc(100dvh - 300px); min-height: 280px; }
+/* Recuadro del mapa: barra de herramientas, mapa y estado del sitio en una sola caja */
+.mapa-caja { border: 2px solid var(--azul, #013254); border-radius: 12px; overflow: hidden; background: #fff; margin: 4px 0 6px; scroll-margin-top: 112px; }
+.mapa-caja .mapa { margin: 0; border-radius: 0; border: 0; height: 320px; }
+.mapa-caja #herr { padding: 8px; background: #f4f6f9; border-bottom: 1px solid #d9dee5; }
+.mapa-caja #herr .aviso { margin: 0 0 8px; padding: 8px 10px; font-size: 14px; }
+.mapa-caja #herr .herr { margin: 0; }
+.barra-mapa { display: flex; flex-wrap: wrap; gap: 6px; }
+.hbtn { flex: 0 0 auto; border: 1px solid #c7ced8; background: #fff; color: var(--tinta, #252E39); border-radius: 99px; padding: 8px 12px; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; min-height: 42px; }
+.hbtn.sitio { background: var(--azul, #013254); color: #fff; border-color: var(--azul, #013254); }
+.hbtn:active { transform: scale(.97); }
+.gps.compacto { text-align: left; padding: 8px 10px; margin: 0; border: 0; border-top: 1px solid #d9dee5; border-radius: 0; font-size: 13.5px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.gps.compacto .prec { font-size: inherit; }
+.enlace { background: none; border: 0; padding: 4px 0; color: var(--azul, #013254); font: inherit; font-weight: 700; text-decoration: underline; }
 .ayuda-zonas { margin: 4px 0 8px; }
