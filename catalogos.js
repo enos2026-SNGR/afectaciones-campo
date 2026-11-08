@@ -1,6 +1,6 @@
 /* Listas cerradas y definiciones. Deben coincidir con CATALOGOS en el backend (Code.gs). */
 var CATALOGOS = {
-  'Tipo de Evento': ['Inundación', 'Movimiento en masa'],
+  'Tipo de Evento': ['Inundación', 'Movimiento en masa', 'Oleaje'],
   'Origen': ['Lluvia intensa', 'Oleaje o aguaje', 'Lluvia y oleaje combinados', 'No determinado'],
   'Nivel del Agua': ['Sin agua', 'Hasta el tobillo (menos de 0,30 m)', 'Hasta la rodilla (0,30 a 0,50 m)',
                      'Hasta la cintura (0,50 a 1 m)', 'Sobre la cintura (más de 1 m)'],
@@ -18,7 +18,10 @@ var CATALOGOS = {
                              'Alojamiento temporal', 'Colchones y cobijas', 'Bombas de achique',
                              'Maquinaria', 'Atención de salud', 'Ninguna'],
   'Etiqueta Foto': ['Vista general', 'Viviendas', 'Vía', 'Servicios', 'Albergue'],
-  'Tipo Geometría': ['Zona afectada', 'Tramo de vía', 'Cauce desbordado', 'Punto crítico'],
+  'Tipo Geometría': ['Zona afectada', 'Tramo de vía', 'Cauce desbordado', 'Otra línea', 'Punto crítico'],
+  // Qué es una línea dibujada: el nombre en pantalla y el tipo que se guarda
+  'Tipo de Línea': [['Vía afectada', 'Tramo de vía'], ['Cauce desbordado', 'Cauce desbordado'], ['Otra', 'Otra línea']],
+  'Infraestructura Esencial': ['Institución educativa', 'Centro de salud', 'Otros'],
   'Detalle Punto Crítico': ['Vivienda afectada', 'Alcantarilla o sumidero obstruido', 'Deslizamiento', 'Hundimiento o socavón', 'Infraestructura pública afectada', 'Otro']
 };
 

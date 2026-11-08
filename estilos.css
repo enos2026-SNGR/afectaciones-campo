@@ -253,3 +253,11 @@ body.dibujando #mapaFicha { height: calc(100vh - 300px); height: calc(100dvh - 3
 #msgParr { font-size: 13px; margin: 0 0 8px; }
 #bloqueMapa { scroll-margin-top: 112px; }
 #bloqueMapa .campo input[data-texto="Sector"] { padding-top: 10px; padding-bottom: 10px; }
+/* Herramientas del mapa: la ubicación del evento separada de los dibujos de afectación */
+.grupo-herr { margin-bottom: 6px; }
+.grupo-herr + .grupo-herr { padding-top: 6px; border-top: 1px dashed #c7ced8; }
+.etq-herr { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #5b6573; margin-bottom: 4px; }
+.grupo-herr.sitio .etq-herr { color: #b42318; }
+.hbtn.sitio { background: #D62828; border-color: #D62828; color: #fff; }
+.hbtn.dib { border-color: var(--azul, #013254); color: var(--azul, #013254); }
+.sub-campo { margin: -4px 0 12px 12px; padding-left: 12px; border-left: 3px solid var(--azul, #013254); }

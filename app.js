@@ -77,11 +77,11 @@
   };
   var VACIO = {};
   var LISTAS = ['Origen', 'Nivel del Agua', 'Tendencia del Agua', 'Estado del Evento', 'Solicitud de Cierre',
-    'Hay Personas Afectadas', 'Hay Viviendas Afectadas', 'Descripción de la Afectación',
+    'Hay Personas Afectadas', 'Hay Viviendas Afectadas', 'Descripción de la Afectación', 'Hay Infraestructura Esencial Afectada', 'Otra Infraestructura Afectada',
     'Agua Potable', 'Alcantarillado o Pozos Sépticos', 'Energía Eléctrica', 'Telefonía e Internet', 'Vía de Acceso',
     'Funcionamiento Edificaciones Públicas', 'Funcionamiento Muelles', 'Justificación de Baja', 'Provincia', 'Código Parroquia', 'Cantón', 'Parroquia', 'Sector', 'Descripción', 'Tipo de Evento'];
   var CIFRAS = Object.keys(ETIQUETAS);
-  var MULTI = ['Grupos Prioritarios', 'Necesidades Inmediatas'];
+  var MULTI = ['Grupos Prioritarios', 'Necesidades Inmediatas', 'Infraestructura Esencial Afectada'];
   LISTAS.forEach(function (k) { VACIO[k] = ''; });
   CIFRAS.forEach(function (k) { VACIO[k] = ''; });
   MULTI.forEach(function (k) { VACIO[k] = []; });
@@ -617,7 +617,7 @@
   // Asistente de pasos
   // ----------------------------------------------------------------
   var PASOS = [
-    { t: 'Ubicación y zonas afectadas', f: pasoUbicacionZonas },
+    { t: 'Ubicación y áreas afectadas', f: pasoUbicacionZonas },
     { t: 'Evento', f: pasoEvento },
     { t: 'Personas y viviendas', f: pasoPersonas },
     { t: 'Servicios e infraestructura', f: pasoServicios },
@@ -688,6 +688,7 @@
         else { lista = lista.filter(function (x) { return x !== 'Ninguna'; }); lista.push(v); }
         cambiar(campo, lista);
         $$('.op', cont).forEach(function (x) { x.classList.toggle('sel', lista.indexOf(x.getAttribute('data-v')) >= 0); });
+        alCambiar && alCambiar(campo, lista);
       };
     });
   }
@@ -800,15 +801,11 @@
     $$('[data-tipoev]', cuerpo).forEach(function (b) {
       b.onclick = function () {
         var t = b.getAttribute('data-tipoev'), antes = f.valores['Tipo de Evento'];
-        var hay = f.geometrias.some(function (g) { return formaGeo(g.tipo) !== 'poligono'; });
-        var seguir = t === 'Movimiento en masa' && hay ? confirmar('En movimiento en masa solo se dibuja el área afectada. Se quitarán los tramos, cauces y puntos dibujados.', 'Cambiar') : Promise.resolve(true);
-        seguir.then(function (ok) {
-          if (!ok) return;
+        Promise.resolve(true).then(function () {
           f.valores['Tipo de Evento'] = t;
-          if (t === 'Movimiento en masa') {
-            f.geometrias = f.geometrias.filter(function (g) { return formaGeo(g.tipo) === 'poligono'; });
-            ['Origen', 'Nivel del Agua', 'Tendencia del Agua'].forEach(function (c) { f.valores[c] = ''; });
-          }
+          // Origen, nivel y tendencia del agua: inundación; nivel y tendencia: oleaje
+          if (t === 'Movimiento en masa') ['Origen', 'Nivel del Agua', 'Tendencia del Agua'].forEach(function (c) { f.valores[c] = ''; });
+          if (t === 'Oleaje') f.valores['Origen'] = '';
           guardar();
           $$('[data-tipoev]', cuerpo).forEach(function (x) { x.classList.toggle('sel', x === b); });
           if (S.mostrarMapa) S.mostrarMapa();
@@ -959,9 +956,10 @@
 
   // ---------------- Paso 2: Evento ----------------
   function esMM() { return S.ficha && S.ficha.valores['Tipo de Evento'] === 'Movimiento en masa'; }
+  function esOleaje() { return S.ficha && S.ficha.valores['Tipo de Evento'] === 'Oleaje'; }
   function pasoEvento(cuerpo) {
     var f = S.ficha;
-    var h = (esMM() ? '' : campoOpciones('Origen', CATALOGOS['Origen'], 'Origen observado') +
+    var h = (esMM() ? '' : (esOleaje() ? '' : campoOpciones('Origen', CATALOGOS['Origen'], 'Origen observado')) +
       campoOpciones('Nivel del Agua', CATALOGOS['Nivel del Agua'], 'Nivel del agua', { una: true }) +
       campoOpciones('Tendencia del Agua', CATALOGOS['Tendencia del Agua'], 'Tendencia del agua')) +
       campoOpciones('Estado del Evento', CATALOGOS['Estado del Evento'], 'Estado del evento', { oblig: true, info: 'estado' });
@@ -1016,22 +1014,23 @@
         return campoOpciones(c, CATALOGOS['Servicio'], c);
       }).join('') +
       campoOpciones('Vía de Acceso', CATALOGOS['Vía de Acceso'], 'Vía de acceso al sitio', { info: 'via' }) +
-      '<p class="muted">La longitud de vía afectada se calcula del tramo que dibuje en el mapa.</p>' +
-      '<h3>Infraestructura esencial afectada</h3>' +
-      contador('Edificaciones Públicas Afectadas') + '<div id="fEdif"></div>' +
-      contador('Muelles y Embarcaderos Afectados') + '<div id="fMuel"></div>';
+      '<p class="muted">La longitud de la vía afectada se calcula de la línea que dibuje en el mapa.</p>' +
+      campoOpciones('Hay Infraestructura Esencial Afectada', CATALOGOS['Afectación'], 'Infraestructura esencial afectada') +
+      '<div id="fInfra"></div>';
     cuerpo.innerHTML = h;
+    // Si hay infraestructura esencial afectada se pregunta cuál; "Otros" pide describirla
     function refrescar() {
-      var v = S.ficha.valores;
-      var e = Number(v['Edificaciones Públicas Afectadas']) > 0, m = Number(v['Muelles y Embarcaderos Afectados']) > 0;
-      if (!e && v['Funcionamiento Edificaciones Públicas']) cambiar('Funcionamiento Edificaciones Públicas', '');
-      if (!m && v['Funcionamiento Muelles']) cambiar('Funcionamiento Muelles', '');
-      $('#fEdif').innerHTML = e ? campoOpciones('Funcionamiento Edificaciones Públicas', CATALOGOS['Funcionamiento'], 'Funcionamiento de las edificaciones') : '';
-      $('#fMuel').innerHTML = m ? campoOpciones('Funcionamiento Muelles', CATALOGOS['Funcionamiento'], 'Funcionamiento de los muelles') : '';
-      enlazarOpciones($('#fEdif')); enlazarOpciones($('#fMuel'));
+      var v = S.ficha.valores, si = v['Hay Infraestructura Esencial Afectada'] === 'Sí';
+      var lista = v['Infraestructura Esencial Afectada'] || [];
+      if (!si && lista.length) { cambiar('Infraestructura Esencial Afectada', []); lista = []; }
+      var otros = si && lista.indexOf('Otros') >= 0;
+      if (!otros && v['Otra Infraestructura Afectada']) cambiar('Otra Infraestructura Afectada', '');
+      var d = $('#fInfra');
+      d.innerHTML = si ? '<div class="sub-campo">' + campoMulti('Infraestructura Esencial Afectada', CATALOGOS['Infraestructura Esencial'], '¿Cuál?') +
+        (otros ? '<div class="campo"><label for="t-otraInfra">Describa la otra infraestructura afectada <span class="oblig">*</span></label><textarea id="t-otraInfra" data-texto="Otra Infraestructura Afectada" placeholder="Ej.: puente peatonal, captación de agua, UPC">' + esc(v['Otra Infraestructura Afectada'] || '') + '</textarea></div>' : '') + '</div>' : '';
+      enlazarOpciones(d, refrescar); enlazarTexto(d);
     }
-    enlazarOpciones(cuerpo);
-    enlazarContadores(cuerpo, refrescar);
+    enlazarOpciones(cuerpo, function (campo) { if (campo === 'Hay Infraestructura Esencial Afectada') refrescar(); });
     refrescar();
   }
 
@@ -1079,7 +1078,7 @@
         d = { root: d, cont: d.lastChild };
       } else d = { root: d, cont: d };
       d.cont.innerHTML = CATALOGOS['Estado del Evento'].map(function (k) { return '<i style="background:' + COLOR_ESTADO[k] + '"></i>' + k; }).join('<br>') +
-        (conTipos ? '<hr><span class="ls">📍</span>Sitio del evento<br><span class="lz"></span>Zona afectada<br><span class="lv"></span>Tramo de vía<br><span class="lc"></span>Cauce desbordado<br><span class="lp"></span>Punto crítico' : '');
+        (conTipos ? '<hr><span class="ls">📍</span>Sitio del evento<br><span class="lz"></span>Área afectada<br><span class="lv"></span>Tramo de vía<br><span class="lc"></span>Cauce desbordado<br><span class="lp"></span>Punto crítico' : '');
       L.DomEvent.disableClickPropagation(d.root);
       return d.root;
     };
@@ -1091,17 +1090,23 @@
     'Zona afectada': { forma: 'poligono', min: 3, ayuda: 'Toque el mapa en cada esquina de la zona afectada.' },
     'Tramo de vía': { forma: 'linea', min: 2, ayuda: 'Toque el mapa a lo largo del tramo de vía afectado.' },
     'Cauce desbordado': { forma: 'linea', min: 2, ayuda: 'Toque el mapa siguiendo el río, quebrada o canal que se desbordó.' },
+    'Otra línea': { forma: 'linea', min: 2, ayuda: 'Toque el mapa a lo largo de la línea afectada.' },
+    // Herramienta "Línea": al terminar se elige qué es (vía, cauce u otra)
+    'Línea': { forma: 'linea', min: 2, ayuda: 'Toque el mapa a lo largo de la línea afectada (vía, cauce u otra). Al terminar indica qué es.', herramienta: true },
     'Punto crítico': { forma: 'punto', min: 1, ayuda: 'Toque el mapa en el punto crítico.' }
   };
   var MAX_GEOMETRIAS = 60;
   function grupoGeo(t) { return t === 'Área inundada' ? 'Zona afectada' : t; }
-  // En movimiento en masa solo se dibuja el área afectada
-  function tiposPermitidos() { return esMM() ? ['Zona afectada'] : Object.keys(TIPOS_GEO); }
-  function nombreGeo(t) { return esMM() && grupoGeo(t) === 'Zona afectada' ? 'Área afectada' : grupoGeo(t); }
+  // En todos los tipos de evento se dibujan tres cosas: área (polígono), línea y punto
+  function tiposPermitidos() { return ['Zona afectada', 'Línea', 'Punto crítico']; }
+  // 'Zona afectada' se guarda con ese nombre por compatibilidad; en pantalla es "Área afectada"
+  var NOMBRE_GEO = { 'Zona afectada': 'Área afectada', 'Tramo de vía': 'Vía afectada', 'Otra línea': 'Otra línea afectada', 'Línea': 'Línea afectada' };
+  function nombreGeo(t) { return NOMBRE_GEO[grupoGeo(t)] || grupoGeo(t); }
   function formaGeo(t) { return (TIPOS_GEO[grupoGeo(t)] || {}).forma; }
   function firmasGeo(lista) {
     var o = {};
     Object.keys(TIPOS_GEO).forEach(function (t) {
+      if (TIPOS_GEO[t].herramienta) return;
       o[t] = JSON.stringify(lista.filter(function (g) { return grupoGeo(g.tipo) === t; }).map(function (g) { return [g.coordenadas, g.detalle || '', g.nota || '']; }));
     });
     return o;
@@ -1109,6 +1114,7 @@
   function geometriasAEnviar(f, todo) {
     var ahora = firmasGeo(f.geometrias), base = f.geoBase, envio = [];
     Object.keys(TIPOS_GEO).forEach(function (t) {
+      if (TIPOS_GEO[t].herramienta) return;
       var lista = f.geometrias.filter(function (g) { return grupoGeo(g.tipo) === t; });
       var antes = base ? (base[t] || '[]') : (lista.some(function (g) { return !g.precargada; }) ? null : ahora[t]);
       if (!todo && ahora[t] === antes) return;
@@ -1133,12 +1139,12 @@
   }
 
   function textoZonas() {
-    $('#subZonas').textContent = esMM() ? 'En el mismo mapa, dibuje el área afectada (opcional).' : 'En el mismo mapa, dibuje lo que pueda (opcional, varios de cada uno).';
+    $('#subZonas').textContent = 'Dibuje la afectación (opcional, varios de cada uno): áreas, líneas como vías o cauces, y puntos críticos.';
   }
   var ICONO_GEO = { poligono: '⬠', linea: '〰', punto: '◆' };
   var ICONO_SITIO = L.divIcon({ className: 'pin-sitio', iconSize: [34, 46], iconAnchor: [17, 45],
     html: '<svg viewBox="0 0 34 46" width="34" height="46" aria-label="Sitio del evento"><path d="M17 1C8.2 1 1 8 1 16.8 1 28.5 17 45 17 45s16-16.5 16-28.2C33 8 25.8 1 17 1z" fill="#D62828" stroke="#fff" stroke-width="2"/><circle cx="17" cy="16.5" r="6" fill="#fff"/></svg>' });
-  var CORTO_GEO = { 'Zona afectada': 'Zona', 'Tramo de vía': 'Vía', 'Cauce desbordado': 'Cauce', 'Punto crítico': 'Punto' };
+  var CORTO_GEO = { 'Zona afectada': 'Área afectada', 'Línea': 'Línea', 'Punto crítico': 'Punto crítico' };
   function pasoUbicacionZonas(cuerpo) {
     // Orden: tipo de evento; al elegirlo aparecen provincia, cantón y parroquia en una fila, el sector y el mapa
     var f = S.ficha, oculto = f.tipo === 'INICIAL' && !f.valores['Tipo de Evento'];
@@ -1186,7 +1192,7 @@
 
     function pintarFicha() {
       capaFicha.clearLayers();
-      var color = COLOR_ESTADO[f.valores['Estado del Evento']] || '#013254';
+      var color = '#013254'; // los dibujos de afectación van en azul; el sitio del evento, en rojo
       var uu = f.ubicacion;
       // Sitio del evento: globito rojo; no captura toques, así se puede dibujar encima
       if (uu && uu.lat != null) L.marker([uu.lat, uu.lon], { icon: ICONO_SITIO, interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(capaFicha);
@@ -1219,25 +1225,42 @@
     // Nota (y tipo de punto crítico) de un elemento ya dibujado
     function editarGeo(i, nuevo) {
       var g = f.geometrias[i];
-      var esPunto = formaGeo(g.tipo) === 'punto';
-      var m = modal('<h2>' + esc(grupoGeo(g.tipo)) + '</h2>' +
-        (esPunto ? '<div class="etq">¿Qué hay en este punto? <span class="oblig">*</span></div><div class="opciones" id="mDet">' +
-          CATALOGOS['Detalle Punto Crítico'].map(function (o) { return '<button type="button" class="op' + (g.detalle === o ? ' sel' : '') + '" data-o="' + esc(o) + '">' + esc(o) + '</button>'; }).join('') + '</div>' : '') +
-        '<div class="campo"><label for="mNota">Nota (opcional)</label><input type="text" id="mNota" maxlength="300" value="' + esc(g.nota || '') + '" placeholder="Ej.: agua hasta la rodilla, calle sin paso"><p class="muted">Puede dictar con el micrófono del teclado.</p></div>' +
-        '<div class="fila-btn"><button class="btn" id="mNo">' + (nuevo ? 'Quitar punto' : 'Cancelar') + '</button>' +
-        '<button class="btn primario" id="mOk"' + (esPunto && !g.detalle ? ' disabled' : '') + '>Listo</button></div>');
+      var esPunto = formaGeo(g.tipo) === 'punto', esLinea = formaGeo(g.tipo) === 'linea';
+      var opciones = esPunto ? CATALOGOS['Detalle Punto Crítico'].map(function (o) { return [o, o]; }) : esLinea ? CATALOGOS['Tipo de Línea'] : [];
+      var actual = esPunto ? (g.detalle || '') : (esLinea && g.tipo !== 'Línea' ? grupoGeo(g.tipo) : '');
+      var m = modal('<h2>' + esc(nombreGeo(g.tipo)) + '</h2>' +
+        (opciones.length ? '<div class="etq">' + (esPunto ? '¿Qué hay en este punto?' : '¿Qué es esta línea?') + ' <span class="oblig">*</span></div><div class="opciones" id="mDet">' +
+          opciones.map(function (o) { return '<button type="button" class="op' + (actual === o[1] ? ' sel' : '') + '" data-o="' + esc(o[1]) + '">' + esc(o[0]) + '</button>'; }).join('') + '</div>' : '') +
+        '<div class="campo"><label for="mNota" id="mNotaEt">Nota (opcional)</label><input type="text" id="mNota" maxlength="300" value="' + esc(g.nota || '') + '" placeholder="Ej.: agua hasta la rodilla, calle sin paso"><p class="muted">Puede dictar con el micrófono del teclado.</p></div>' +
+        '<div class="fila-btn"><button class="btn" id="mNo">' + (nuevo ? 'Quitar ' + (esPunto ? 'punto' : esLinea ? 'línea' : 'área') : 'Cancelar') + '</button>' +
+        '<button class="btn primario" id="mOk">Listo</button></div>', function () { if (nuevo) quitarSinTipo(i); });
+      var det = actual;
+      // "Otra línea" exige describirla en la nota
+      function revisar() {
+        var otra = esLinea && det === 'Otra línea';
+        $('#mNotaEt', m).textContent = otra ? 'Describa la línea *' : 'Nota (opcional)';
+        $('#mOk', m).disabled = (opciones.length && !det) || (otra && !$('#mNota', m).value.trim());
+      }
+      $$('#mDet .op', m).forEach(function (b) {
+        b.onclick = function () { det = b.getAttribute('data-o'); $$('#mDet .op', m).forEach(function (x) { x.classList.toggle('sel', x === b); }); revisar(); };
+      });
+      $('#mNota', m).oninput = revisar;
+      revisar();
       $('#mNo', m).onclick = function () {
         if (nuevo) { f.geometrias.splice(i, 1); guardar(); }
         cerrarModal(); pintarFicha(); herramientas();
       };
-      var det = g.detalle || '';
-      $$('#mDet .op', m).forEach(function (b) {
-        b.onclick = function () { det = b.getAttribute('data-o'); $$('#mDet .op', m).forEach(function (x) { x.classList.toggle('sel', x === b); }); $('#mOk', m).disabled = false; };
-      });
       $('#mOk', m).onclick = function () {
-        g.detalle = esPunto ? det : ''; g.nota = $('#mNota', m).value.trim();
-        cerrarModal(); guardar(); pintarFicha();
+        if (esPunto) g.detalle = det; else g.detalle = '';
+        if (esLinea) g.tipo = det;
+        g.nota = $('#mNota', m).value.trim();
+        cerrarModal(); guardar(); pintarFicha(); herramientas();
       };
+    }
+    // Si se cierra la ventana sin decir qué es la línea nueva, no queda una línea sin tipo
+    function quitarSinTipo(i) {
+      var g = f.geometrias[i];
+      if (g && g.tipo === 'Línea') { f.geometrias.splice(i, 1); guardar(); pintarFicha(); herramientas(); }
     }
     function pintarTemp() {
       capaTemp.clearLayers();
@@ -1252,17 +1275,18 @@
           '<div class="herr"><button class="btn" id="hCancelar" style="grid-column:1/-1">Cancelar</button></div>';
       } else if (!modo) {
         var lleno = f.geometrias.length >= MAX_GEOMETRIAS;
-        var sitio = f.tipo === 'INICIAL' ? '<button class="hbtn sitio" id="gpsMapa">📍 ' + (f.ubicacion && f.ubicacion.aceptada ? 'Mover sitio' : 'Marcar sitio') + '</button>' : '';
-        h = '<div class="barra-mapa">' + sitio + (lleno ? '' :
-          tiposPermitidos().map(function (t) { return '<button class="hbtn" data-dibujar="' + esc(t) + '">' + ICONO_GEO[formaGeo(t)] + ' ' + esc(esMM() ? nombreGeo(t) : (CORTO_GEO[t] || nombreGeo(t))) + '</button>'; }).join('') +
-          '<button class="hbtn" id="hCaminar">🚶 Caminar borde</button>') + '</div>' +
+        // Dos grupos separados: la ubicación del evento (globito rojo) y los dibujos de la afectación (azul)
+        var sitio = f.tipo === 'INICIAL' ? '<div class="grupo-herr sitio"><span class="etq-herr">Ubicación del evento</span><div class="barra-mapa"><button class="hbtn sitio" id="gpsMapa">📍 ' + (f.ubicacion && f.ubicacion.aceptada ? 'Mover el sitio' : 'Marcar el sitio') + '</button></div></div>' : '';
+        h = sitio + '<div class="grupo-herr dibujo"><span class="etq-herr">Dibujar la afectación</span><div class="barra-mapa">' + (lleno ? '' :
+          tiposPermitidos().map(function (t) { return '<button class="hbtn dib" data-dibujar="' + esc(t) + '">' + ICONO_GEO[formaGeo(t)] + ' ' + esc(CORTO_GEO[t] || nombreGeo(t)) + '</button>'; }).join('') +
+          '<button class="hbtn dib" id="hCaminar">🚶 Caminar el borde</button>') + '</div></div>' +
           (lleno ? '<div class="aviso alerta">Llegó al máximo de ' + MAX_GEOMETRIAS + ' elementos en esta ficha.</div>' : '');
       } else if (modo === 'caminar') {
-        h = '<div class="aviso info">Camine por el borde de la zona. Puntos tomados: <b id="nPts">' + verts.length + '</b>. Se descartan los de precisión peor que ' + CONFIG.PRECISION_ACEPTABLE_M + ' m.</div>' +
+        h = '<div class="aviso info">Camine por el borde del área afectada. Puntos tomados: <b id="nPts">' + verts.length + '</b>. Se descartan los de precisión peor que ' + CONFIG.PRECISION_ACEPTABLE_M + ' m.</div>' +
           '<div class="herr"><button class="btn" id="hCancelar">Cancelar</button><button class="btn primario" id="hTerminar"' + (verts.length >= 3 ? '' : ' disabled') + '>Terminar</button></div>';
       } else {
         var min = TIPOS_GEO[modo].min;
-        h = '<div class="aviso info"><b>' + esc(nombreGeo(modo)) + ':</b> ' + (esMM() && modo === 'Zona afectada' ? 'Toque el mapa en cada esquina del área afectada por el movimiento en masa.' : TIPOS_GEO[modo].ayuda) + (min > 1 ? ' Puntos: <b>' + verts.length + '</b>' : '') + '</div>' +
+        h = '<div class="aviso info"><b>' + esc(nombreGeo(modo)) + ':</b> ' + TIPOS_GEO[modo].ayuda + (min > 1 ? ' Puntos: <b>' + verts.length + '</b>' : '') + '</div>' +
           '<div class="herr' + (min > 1 ? ' tres' : '') + '">' + (min > 1 ? '<button class="btn" id="hDeshacer"' + (verts.length ? '' : ' disabled') + '>Deshacer</button>' : '') + '<button class="btn" id="hCancelar"' + (min > 1 ? '' : ' style="grid-column:1/-1"') + '>Cancelar</button>' +
           (min > 1 ? '<button class="btn primario" id="hTerminar"' + (verts.length >= min ? '' : ' disabled') + '>Terminar</button>' : '') + '</div>';
       }
@@ -1288,8 +1312,8 @@
       if (verts.length < TIPOS_GEO[tipo].min) { toast('Faltan puntos'); return; }
       f.geometrias.push({ id: uuid(), tipo: tipo, coordenadas: verts.map(function (c) { return [Number(c[0].toFixed(6)), Number(c[1].toFixed(6))]; }), detalle: '', nota: '' });
       modo = null; verts = []; guardar(); pintarTemp(); pintarFicha(); herramientas();
-      // El punto crítico necesita su tipo: se pregunta enseguida
-      if (tipo === 'Punto crítico') editarGeo(f.geometrias.length - 1, true);
+      // El punto crítico y la línea necesitan saber qué son: se pregunta enseguida
+      if (tipo === 'Punto crítico' || tipo === 'Línea') editarGeo(f.geometrias.length - 1, true);
     }
     function iniciarCaminata() {
       modo = 'caminar'; verts = [];
@@ -1387,9 +1411,12 @@
     if (f.tipo === 'INICIAL' && !v['Tipo de Evento']) b.push([1, 'Falta el tipo de evento']);
     if (!v['Código Parroquia'] && !(f.tipo !== 'INICIAL' && v['Parroquia'])) b.push([1, 'Falta la provincia, el cantón o la parroquia']);
     if (!v['Estado del Evento']) b.push([2, 'Falta el estado del evento']);
+    if (f.geometrias.some(function (g) { return g.tipo === 'Línea'; })) b.push([1, 'Falta indicar qué es una línea dibujada (toque "Nota")']);
     if (f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'punto' && !g.detalle; })) b.push([1, 'Falta indicar qué hay en un punto crítico (toque "Nota")']);
     if (!v['Hay Personas Afectadas']) b.push([3, 'Falta indicar si hay personas afectadas']);
     if (!v['Hay Viviendas Afectadas']) b.push([3, 'Falta indicar si hay viviendas afectadas']);
+    if (v['Hay Infraestructura Esencial Afectada'] === 'Sí' && !(v['Infraestructura Esencial Afectada'] || []).length) b.push([4, 'Falta indicar qué infraestructura esencial está afectada']);
+    if ((v['Infraestructura Esencial Afectada'] || []).indexOf('Otros') >= 0 && !String(v['Otra Infraestructura Afectada'] || '').trim()) b.push([4, 'Falta describir la otra infraestructura afectada']);
     if (f.tipo === 'CORRECCION' && !Object.keys(diferencias()).length && !geometriaCambio()) b.push([1, 'No hay cambios que corregir']);
     return b;
   }
@@ -1398,7 +1425,7 @@
     var bl = bloqueos();
     $('#bloqueos').innerHTML = bl.map(function (x) { return '<div class="aviso error" data-paso="' + x[0] + '" style="cursor:pointer">' + esc(x[1]) + ' ›</div>'; }).join('') +
       advertencias().map(function (a) { return '<div class="aviso alerta" data-paso="3" style="cursor:pointer">' + esc(a) + '</div>'; }).join('') +
-      (f.tipo === 'INICIAL' && !f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; }) ? '<div class="aviso alerta" data-paso="1" style="cursor:pointer">' + (esMM() ? 'No se dibujó el área afectada' : 'No se dibujó ninguna zona afectada') + '. Puede enviar igual o volver al mapa ›</div>' : '');
+      (f.tipo === 'INICIAL' && !f.geometrias.some(function (g) { return formaGeo(g.tipo) === 'poligono'; }) ? '<div class="aviso alerta" data-paso="1" style="cursor:pointer">' + 'No se dibujó ninguna área afectada' + '. Puede enviar igual o volver al mapa ›</div>' : '');
     function fila(et, val, paso) { return '<tr class="ir" data-paso="' + paso + '"><td>' + esc(et) + '</td><td><b>' + (val === '' || val == null ? '<span class="muted">Sin dato</span>' : esc(val)) + '</b></td></tr>'; }
     DB.porIndice('fotos', 'id_visita', f.id_visita).then(function (fotos) {
       $('#resumen').innerHTML =
@@ -1416,7 +1443,7 @@
   function fmt(x) { return x === '' || x == null ? 'sin dato' : String(x).replace('.', ','); }
   function resumenGeo(lista) {
     var n = {}; lista.forEach(function (g) { var t = grupoGeo(g.tipo); n[t] = (n[t] || 0) + 1; });
-    return Object.keys(n).map(function (t) { return n[t] + ' ' + (n[t] > 1 ? { 'Zona afectada': 'zonas afectadas', 'Tramo de vía': 'tramos de vía', 'Cauce desbordado': 'cauces desbordados', 'Punto crítico': 'puntos críticos' }[t] : t.toLowerCase()); }).join(', ');
+    return Object.keys(n).map(function (t) { return n[t] + ' ' + (n[t] > 1 ? { 'Zona afectada': 'áreas afectadas', 'Tramo de vía': 'vías afectadas', 'Cauce desbordado': 'cauces desbordados', 'Otra línea': 'otras líneas afectadas', 'Punto crítico': 'puntos críticos' }[t] : nombreGeo(t).toLowerCase()); }).join(', ');
   }
 
   function comprimir(file) {
