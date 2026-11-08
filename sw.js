@@ -1,7 +1,7 @@
 /* Service worker: abre la app sin conexión, guarda teselas del mapa y sincroniza en segundo plano (Android) */
 importScripts('config.js', 'db.js', 'sync.js');
 
-var APP = 'campo-app-v15';
+var APP = 'campo-app-v16';
 var TESELAS = 'campo-teselas-v2';
 var ARCHIVOS = [
   './', 'index.html', 'app.js', 'estilos.css', 'config.js', 'catalogos.js', 'db.js', 'sync.js',

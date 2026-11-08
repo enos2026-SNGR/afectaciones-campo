@@ -801,6 +801,89 @@
     var d = new Date(t - 5 * 3600e3).toISOString();
     return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) + ' ' + d.slice(11, 16);
   }
+
+  // Imagen del mapa para el reporte: mapa base SNGR (datos de OpenStreetMap) con el sitio y la afectación encima.
+  // Usa las teselas descargadas en el teléfono o, con señal, las del servidor. Si no hay mapa, devuelve null.
+  function imagenMapaReporte(d) {
+    var ANCHO = 1500, ALTO = 760;
+    var pts = [[d.lat, d.lon]];
+    d.geoms.forEach(function (g) { var gj = g.geojson, cs = gj.type === 'Polygon' ? gj.coordinates[0] : gj.type === 'LineString' ? gj.coordinates : [gj.coordinates]; cs.forEach(function (c) { pts.push([c[1], c[0]]); }); });
+    var div = document.createElement('div');
+    div.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + ANCHO + 'px;height:' + ALTO + 'px;';
+    document.body.appendChild(div);
+    var mapa = L.map(div, { zoomControl: false, attributionControl: false, fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, inertia: false, maxZoom: 19, zoomSnap: 0.25 });
+    var b = L.latLngBounds(pts);
+    if (pts.length === 1 || b.getNorthEast().distanceTo(b.getSouthWest()) < 120) mapa.setView([d.lat, d.lon], 17);
+    else mapa.fitBounds(b.pad(0.18), { maxZoom: 18 });
+    function limpiar() { try { mapa.remove(); } catch (x) {} div.remove(); }
+    // Sin señal solo hay fondo si el área está descargada
+    var c = mapa.getCenter(), z = Math.min(15, mapa.getZoom()), n = Math.pow(2, z);
+    var tx = Math.floor((c.lng + 180) / 360 * n), r = c.lat * Math.PI / 180, ty = Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n);
+    var hay = navigator.onLine ? Promise.resolve(true) : MapaBase.fuente.getZxy(z, tx, ty).then(function (t) { return !!t; }).catch(function () { return false; });
+    return hay.then(function (si) {
+      if (!si) { limpiar(); return null; }
+      return new Promise(function (ok) {
+        var capa = MapaBase.capa(), listo = false;
+        var fin = function () { if (listo) return; listo = true; setTimeout(function () { ok(componer()); }, 400); };
+        capa.on('load', fin); setTimeout(fin, 12000);
+        capa.addTo(mapa);
+      });
+    }).then(function (img) { limpiar(); return img; }, function () { limpiar(); return null; });
+
+    function componer() {
+      var cv = document.createElement('canvas'); cv.width = ANCHO; cv.height = ALTO;
+      var g = cv.getContext('2d'); g.fillStyle = '#f2efe9'; g.fillRect(0, 0, ANCHO, ALTO);
+      var caja = div.getBoundingClientRect(), dib = 0;
+      $$('.leaflet-tile-pane canvas, .leaflet-tile-pane img', div).forEach(function (t) {
+        var rc = t.getBoundingClientRect();
+        try { g.drawImage(t, rc.left - caja.left, rc.top - caja.top, rc.width, rc.height); dib++; } catch (x) {}
+      });
+      if (!dib) return null;
+      var P = function (lat, lon) { var p = mapa.latLngToContainerPoint([lat, lon]); return [p.x, p.y]; };
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      d.geoms.forEach(function (gm) {
+        var gj = gm.geojson;
+        g.setLineDash([]);
+        if (gj.type === 'Polygon') {
+          g.beginPath(); gj.coordinates[0].forEach(function (c, i) { var p = P(c[1], c[0]); if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); }); g.closePath();
+          g.fillStyle = 'rgba(1,50,84,0.28)'; g.fill(); g.strokeStyle = '#013254'; g.lineWidth = 5; g.stroke();
+        } else if (gj.type === 'LineString') {
+          g.beginPath(); gj.coordinates.forEach(function (c, i) { var p = P(c[1], c[0]); if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); });
+          g.strokeStyle = '#ffffff'; g.lineWidth = 13; g.stroke();
+          g.strokeStyle = gm.tipo === 'Cauce desbordado' ? '#1f77b4' : '#013254'; g.lineWidth = 8;
+          if (gm.tipo === 'Cauce desbordado') g.setLineDash([26, 16]); if (gm.tipo === 'Otra línea') g.setLineDash([6, 12]);
+          g.stroke(); g.setLineDash([]);
+        } else {
+          var q = P(gj.coordinates[1], gj.coordinates[0]);
+          g.beginPath(); g.moveTo(q[0], q[1] - 15); g.lineTo(q[0] + 15, q[1]); g.lineTo(q[0], q[1] + 15); g.lineTo(q[0] - 15, q[1]); g.closePath();
+          g.fillStyle = '#013254'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 3; g.stroke();
+        }
+      });
+      // Globito rojo del sitio
+      var s = P(d.lat, d.lon);
+      g.beginPath(); g.moveTo(s[0], s[1]); g.bezierCurveTo(s[0] - 9, s[1] - 18, s[0] - 22, s[1] - 26, s[0] - 22, s[1] - 42); g.arc(s[0], s[1] - 42, 22, Math.PI, 0); g.bezierCurveTo(s[0] + 22, s[1] - 26, s[0] + 9, s[1] - 18, s[0], s[1]); g.closePath();
+      g.fillStyle = '#D62828'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 4; g.stroke();
+      g.beginPath(); g.arc(s[0], s[1] - 42, 8, 0, 2 * Math.PI); g.fillStyle = '#fff'; g.fill();
+      // Escala gráfica
+      var mpp = mapa.containerPointToLatLng([0, ALTO / 2]).distanceTo(mapa.containerPointToLatLng([100, ALTO / 2])) / 100;
+      var largo = 10; [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000].forEach(function (o) { if (o / mpp <= ANCHO / 5) largo = o; });
+      var lp = largo / mpp, x0 = 30, y0 = ALTO - 34;
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(x0 - 12, y0 - 40, lp + 24, 56);
+      g.strokeStyle = '#111'; g.lineWidth = 5; g.beginPath(); g.moveTo(x0, y0 - 10); g.lineTo(x0, y0); g.lineTo(x0 + lp, y0); g.lineTo(x0 + lp, y0 - 10); g.stroke();
+      g.fillStyle = '#111'; g.font = 'bold 26px sans-serif'; g.textAlign = 'center'; g.fillText(largo >= 1000 ? largo / 1000 + ' km' : largo + ' m', x0 + lp / 2, y0 - 16);
+      // Norte
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(ANCHO - 70, 14, 56, 82);
+      g.fillStyle = '#013254'; g.beginPath(); g.moveTo(ANCHO - 42, 24); g.lineTo(ANCHO - 58, 62); g.lineTo(ANCHO - 26, 62); g.closePath(); g.fill();
+      g.font = 'bold 26px sans-serif'; g.fillText('N', ANCHO - 42, 88);
+      // Atribución
+      var at = 'Mapa base SNGR · datos © colaboradores de OpenStreetMap';
+      g.font = '20px sans-serif'; var aw = g.measureText(at).width;
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(ANCHO - aw - 24, ALTO - 34, aw + 24, 34);
+      g.fillStyle = '#333'; g.textAlign = 'right'; g.fillText(at, ANCHO - 12, ALTO - 10);
+      return { datos: cv.toDataURL('image/jpeg', 0.85), w: ANCHO, h: ALTO };
+    }
+  }
+  function conMapa(d) { return imagenMapaReporte(d).then(function (m) { d.mapa = m; return d; }).catch(function () { return d; }); }
   function nombreArchivo(base, id, ext) { return base + '_' + String(id).replace(/[^A-Za-z0-9-]/g, '') + '_' + sello() + '.' + ext; }
   // PDF de una ficha del teléfono (antes o después de enviarla)
   function pdfDeFicha(f) {
@@ -809,7 +892,7 @@
     DB.porIndice('fotos', 'id_visita', f.id_visita).then(function (fs) {
       var tipo = f.tipo === 'INICIAL' ? 'Registro inicial' : f.tipo === 'ACTUALIZACION' ? 'Actualización' : 'Corrección';
       var aviso = f.estado === 'enviada' ? '' : 'Ficha aún no enviada al servidor (' + ({ borrador: 'borrador', pendiente: 'pendiente de envío', error: 'con error' }[f.estado] || f.estado) + ').';
-      return ReportePDF.ficha(datosReporte(eventoDeFicha(f), fs.filter(function (x) { return x.blob; }), tipo, aviso));
+      return conMapa(datosReporte(eventoDeFicha(f), fs.filter(function (x) { return x.blob; }), tipo, aviso)).then(ReportePDF.ficha);
     }).then(function (b) { ofrecerArchivo(b, nombreArchivo('Reporte', f.id_evento, 'pdf'), 'Reporte de la ficha'); })
       .catch(function (e) { toast('No se pudo generar el reporte: ' + e.message); });
   }
@@ -819,7 +902,7 @@
   }
   function pdfDeEvento(e) {
     toast('Generando el reporte…', 1500);
-    ReportePDF.ficha(datosReporte(e, [], 'Situación según la última visita', 'Las fotos de este evento están en la carpeta de Drive del registro.'))
+    conMapa(datosReporte(e, [], 'Situación según la última visita', 'Las fotos de este evento están en la carpeta de Drive del registro.')).then(ReportePDF.ficha)
       .then(function (b) { ofrecerArchivo(b, nombreArchivo('Reporte', e.id_evento, 'pdf'), 'Reporte del evento'); })
       .catch(function (x) { toast('No se pudo generar el reporte: ' + x.message); });
   }

@@ -100,6 +100,16 @@ var ReportePDF = (function () {
   function croquis(h, d) {
     var doc = h.doc, W = UTIL, H = 92;
     h.espacio(H + 16);
+    // Con mapa de fondo: la imagen ya trae el mapa base, el sitio, la afectación, la escala y el norte
+    if (d.mapa) {
+      var alto = W * d.mapa.h / d.mapa.w;
+      doc.addImage(d.mapa.datos, 'JPEG', M, h.y, W, alto);
+      doc.setDrawColor.apply(doc, LINEA); doc.setLineWidth(0.3); doc.rect(M, h.y, W, alto);
+      h.y += alto + 4;
+      leyenda(h);
+      h.parrafo('Mapa base de la SNGR elaborado con datos de OpenStreetMap (© colaboradores de OpenStreetMap). Coordenadas WGS84.', 7.5, GRIS);
+      return;
+    }
     var lat0 = d.lat, lon0 = d.lon, cosl = Math.cos(lat0 * Math.PI / 180);
     var xy = function (c) { return [(c[0] - lon0) * cosl * 111320, (c[1] - lat0) * 110540]; };
     var todos = [[0, 0]];
@@ -148,7 +158,11 @@ var ReportePDF = (function () {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(30, 30, 30);
     doc.text(largo >= 1000 ? (largo / 1000) + ' km' : largo + ' m', lx + largo * esc / 2, ly - 2, { align: 'center' });
     h.y = by + H + 4;
-    // Leyenda
+    leyenda(h);
+    h.parrafo('Croquis a escala dibujado con las coordenadas registradas (WGS84). No incluye mapa de fondo porque el mapa de esta zona no está descargado en el teléfono y no había señal; para ubicarlo sobre cartografía use las capas SHP.', 7.5, GRIS);
+  }
+  function leyenda(h) {
+    var doc = h.doc;
     doc.setFontSize(8); var x = M;
     var item = function (dib, txt) { dib(x, h.y); doc.setTextColor(30, 30, 30); doc.text(txt, x + 7, h.y + 1); x += 9 + doc.getTextWidth(txt); };
     item(function (a, b) { doc.setFillColor.apply(doc, ROJO); doc.circle(a + 2, b, 1.6, 'F'); }, 'Sitio del evento');
@@ -157,7 +171,6 @@ var ReportePDF = (function () {
     item(function (a, b) { doc.setDrawColor(31, 119, 180); doc.setLineWidth(1); doc.setLineDashPattern([1.5, 1], 0); doc.line(a, b, a + 5, b); doc.setLineDashPattern([], 0); }, 'Cauce desbordado');
     item(function (a, b) { doc.setFillColor.apply(doc, AZUL); doc.triangle(a + 1, b, a + 2.5, b - 1.5, a + 4, b, 'F'); doc.triangle(a + 1, b, a + 2.5, b + 1.5, a + 4, b, 'F'); }, 'Punto crítico');
     h.y += 5;
-    h.parrafo('Croquis a escala dibujado con las coordenadas registradas (WGS84). No incluye mapa de fondo; para ubicarlo sobre cartografía use las capas SHP.', 7.5, GRIS);
   }
   function coords(gj) { return gj.type === 'Polygon' ? gj.coordinates[0] : gj.type === 'LineString' ? gj.coordinates : [gj.coordinates]; }
 
@@ -174,7 +187,7 @@ var ReportePDF = (function () {
         ['Sector o barrio', d.sector], ['Coordenadas (WGS84)', d.lat.toFixed(6) + ', ' + d.lon.toFixed(6) + (d.metodo ? ' · ' + (d.metodo === 'GPS' ? 'GPS' + (d.precision ? ' ' + Math.round(d.precision) + ' m' : '') : 'marcado en el mapa') : '')],
         ['Fecha de observación', d.fecha], ['Técnico', d.tecnico]
       ], { clave: true });
-      h.seccion('Croquis de la afectación');
+      h.seccion('Mapa de la afectación');
       croquis(h, d);
       h.seccion('Evento');
       var ev = [['Tipo de evento', d.tipo_evento], ['Estado del evento', d.v['Estado del Evento']]];
