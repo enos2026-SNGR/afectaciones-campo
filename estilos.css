@@ -244,3 +244,12 @@ body.dibujando #mapaFicha { height: calc(100vh - 300px); height: calc(100dvh - 3
 .ayuda-zonas { margin: 4px 0 8px; }
 .pin-sitio { background: none; border: 0; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
 .leyenda-mapa .ls { display: inline-block; width: 16px; margin-right: 6px; text-align: center; }
+/* Provincia, cantón y parroquia en una fila sobre el mapa */
+.fila-dpa { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.fila-dpa .campo { margin-bottom: 4px; }
+.fila-dpa .etq { font-size: 13px; margin-bottom: 4px; }
+.fila-dpa select { width: 100%; min-width: 0; font-size: 13px; padding: 10px 4px; text-overflow: ellipsis; }
+#msgParr:empty { display: none; }
+#msgParr { font-size: 13px; margin: 0 0 8px; }
+#bloqueMapa { scroll-margin-top: 112px; }
+#bloqueMapa .campo input[data-texto="Sector"] { padding-top: 10px; padding-bottom: 10px; }

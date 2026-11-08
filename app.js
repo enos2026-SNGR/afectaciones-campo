@@ -138,7 +138,7 @@
     marca(false);
     detenerGPS();
     if (S.detenerExtra) { S.detenerExtra(); S.detenerExtra = null; }
-    S.alUbicar = null; S.alTipo = null; S.alGPS = null; S.marcarSitio = null; S.refrescarBarra = null; S.marcandoSitio = false;
+    S.alUbicar = null; S.alTipo = null; S.alGPS = null; S.marcarSitio = null; S.refrescarBarra = null; S.mostrarMapa = null; S.marcandoSitio = false;
     document.body.classList.remove('dibujando');
     if (S.mapa) { S.mapa.remove(); S.mapa = null; }
     $('#navpasos').innerHTML = '';
@@ -618,7 +618,7 @@
     { t: 'Evento', f: pasoEvento },
     { t: 'Personas y viviendas', f: pasoPersonas },
     { t: 'Servicios e infraestructura', f: pasoServicios },
-    { t: 'Medios de vida y necesidades', f: pasoMedios },
+    { t: 'Necesidades inmediatas', f: pasoMedios },
     { t: 'Fotos y envío', f: pasoEnvio }
   ];
   var PASO_ENVIO = 6;
@@ -787,10 +787,12 @@
         CATALOGOS['Tipo de Evento'].map(function (o) { return '<button type="button" class="op' + (f.valores['Tipo de Evento'] === o ? ' sel' : '') + '" data-tipoev="' + esc(o) + '">' + esc(o) + '</button>'; }).join('') + '</div></div>';
     }
     cuerpo.innerHTML = h;
-    abajo.innerHTML = '<div class="campo"><div class="etq">Provincia <span class="oblig">*</span></div><select id="selProv"></select></div>' +
+    abajo.innerHTML = '<div class="fila-dpa">' +
+      '<div class="campo"><div class="etq">Provincia <span class="oblig">*</span></div><select id="selProv"></select></div>' +
       '<div class="campo"><div class="etq">Cantón <span class="oblig">*</span></div><select id="selCanton"></select></div>' +
-      '<div class="campo"><div class="etq">Parroquia <span class="oblig">*</span></div><select id="selParroquia"></select><p class="muted" id="msgParr"></p></div>' +
-      campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio La Merced, calle principal');
+      '<div class="campo"><div class="etq">Parroquia <span class="oblig">*</span></div><select id="selParroquia"></select></div></div>' +
+      '<p class="muted" id="msgParr"></p>' +
+      campoTexto('Sector', 'Sector o barrio', 'Ej.: Barrio La Merced, calle principal', true);
     enlazarTexto(abajo);
     $$('[data-tipoev]', cuerpo).forEach(function (b) {
       b.onclick = function () {
@@ -806,6 +808,7 @@
           }
           guardar();
           $$('[data-tipoev]', cuerpo).forEach(function (x) { x.classList.toggle('sel', x === b); });
+          if (S.mostrarMapa) S.mostrarMapa();
           if (antes !== t && S.alTipo) S.alTipo();
         });
       };
@@ -819,10 +822,10 @@
     if (f.tipo === 'INICIAL' && !(f.ubicacion && f.ubicacion.aceptada)) iniciarGPS();
   }
 
-  function campoTexto(campo, etiqueta, ph) {
+  function campoTexto(campo, etiqueta, ph, sinAyuda) {
     return '<div class="campo"><label for="t-' + esc(campo) + '">' + esc(etiqueta) + '</label>' +
       '<input type="text" id="t-' + esc(campo) + '" data-texto="' + esc(campo) + '" value="' + esc(S.ficha.valores[campo]) + '" placeholder="' + esc(ph || '') + '" autocomplete="off">' +
-      '<p class="muted">Puede dictar con el micrófono del teclado.</p></div>';
+      (sinAyuda ? '' : '<p class="muted">Puede dictar con el micrófono del teclado.</p>') + '</div>';
   }
   function enlazarTexto(raiz) {
     $$('[data-texto]', raiz).forEach(function (i) {
@@ -917,7 +920,7 @@
     if (cod) {
       fijarParroquia(cod); S.selProv = cod.slice(0, 2); S.selCant = cod.slice(0, 4);
       pintarSelectsDPA();
-      if ($('#msgParr')) $('#msgParr').textContent = cerca != null ? 'El punto está fuera de los límites parroquiales: se tomó la parroquia más cercana (a ' + cerca + ' m). Verifíquela.' : 'Detectada con el GPS. Corríjala si no es correcta, sobre todo cerca de un límite.';
+      if ($('#msgParr')) $('#msgParr').textContent = cerca != null ? 'El punto está fuera de los límites parroquiales: se tomó la parroquia más cercana (a ' + cerca + ' m). Verifíquela.' : 'Detectada con el GPS; corríjala si no es correcta.';
     } else if ($('#msgParr')) {
       $('#msgParr').textContent = S.parroquias ? 'No se pudo detectar la parroquia en este punto. Elíjala en la lista.' : 'Elija la parroquia en la lista.';
     }
@@ -1052,11 +1055,7 @@
 
   // ---------------- Paso 5: Medios de vida ----------------
   function pasoMedios(cuerpo) {
-    cuerpo.innerHTML = '<h3>Medios de vida</h3>' + contador('Cultivos Afectados (ha)', { paso: 0.5 }) +
-      contador('Ganado Afectado') + contador('Aves de Corral Afectadas') +
-      contador('Comercios Afectados') + contador('Servicios Turísticos Afectados') + contador('Embarcaciones de Pesca Afectadas') +
-      campoMulti('Necesidades Inmediatas', CATALOGOS['Necesidades Inmediatas'], 'Necesidades inmediatas');
-    enlazarContadores(cuerpo);
+    cuerpo.innerHTML = campoMulti('Necesidades Inmediatas', CATALOGOS['Necesidades Inmediatas'], 'Necesidades inmediatas');
     enlazarOpciones(cuerpo);
   }
 
@@ -1159,13 +1158,28 @@
     html: '<svg viewBox="0 0 34 46" width="34" height="46" aria-label="Sitio del evento"><path d="M17 1C8.2 1 1 8 1 16.8 1 28.5 17 45 17 45s16-16.5 16-28.2C33 8 25.8 1 17 1z" fill="#D62828" stroke="#fff" stroke-width="2"/><circle cx="17" cy="16.5" r="6" fill="#fff"/></svg>' });
   var CORTO_GEO = { 'Zona afectada': 'Zona', 'Tramo de vía': 'Vía', 'Cauce desbordado': 'Cauce', 'Punto crítico': 'Punto' };
   function pasoUbicacionZonas(cuerpo) {
+    // Orden: tipo de evento; al elegirlo aparecen provincia, cantón y parroquia en una fila, el sector y el mapa
+    var f = S.ficha, oculto = f.tipo === 'INICIAL' && !f.valores['Tipo de Evento'];
     cuerpo.innerHTML = '<div id="ubic"></div>' +
+      '<p class="muted" id="pideTipo"' + (oculto ? '' : ' hidden') + '>Elija el tipo de evento para abrir el mapa.</p>' +
+      '<div id="bloqueMapa"' + (oculto ? ' hidden' : '') + '><div id="ubicAbajo"></div>' +
       '<div class="mapa-caja" id="cajaMapa"><div id="herr"></div><div class="mapa" id="mapaFicha"></div><div id="gps"></div></div>' +
-      '<p class="muted ayuda-zonas" id="subZonas"></p><div id="geoms"></div>' +
-      '<div id="ubicAbajo"></div>';
+      '<p class="muted ayuda-zonas" id="subZonas"></p><div id="geoms"></div></div>';
     pasoUbicacion($('#ubic'), $('#ubicAbajo'));
     editorZonas();
     textoZonas();
+    S.mostrarMapa = function () {
+      var b = $('#bloqueMapa'); if (!b || !b.hidden) return;
+      b.hidden = false; $('#pideTipo').hidden = true;
+      setTimeout(function () { b.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+      if (S.mapa) {
+        S.mapa.invalidateSize();
+        var e = S.gpsEstado || {};
+        if (f.ubicacion) S.mapa.setView([f.ubicacion.lat, f.ubicacion.lon], 17);
+        else if (e.mejor) S.mapa.setView([e.mejor.lat, e.mejor.lon], 16);
+        if (S.alGPS) S.alGPS();
+      }
+    };
   }
 
   function editorZonas() {
